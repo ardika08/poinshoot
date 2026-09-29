@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Env & secrets
+.env
+.env.*.local
+*.pem
+*.key
+
+# Build output
+dist/
+build/
+output/
+
+# Laravel specific
+backend/storage/*.key
+backend/storage/app/public/*
+backend/bootstrap/cache/*.php
+backend/database/database.sqlite
+backend/database/*.sqlite
+backend/database/*.sqlite-journal
+*.sqlite
+*.sqlite-journal
+
+# Logs & debug
+*.log
+npm-debug.log*
+backend/storage/logs/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Hermes internal (plan files tidak ikut ke publik)
+.hermes/
+
+# IDE
+.idea/
+.vscode/

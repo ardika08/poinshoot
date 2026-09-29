@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Player extends Model
+{
+    protected $fillable = [
+        'name',
+        'whatsapp',
+        'is_active',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+        ];
+    }
+
+    public function games(): HasMany
+    {
+        return $this->hasMany(Game::class);
+    }
+
+    public function rounds(): HasMany
+    {
+        return $this->hasMany(Round::class);
+    }
+
+    public function bestRound(): ?Round
+    {
+        return $this->rounds()->orderByDesc('total_score')->first();
+    }
+
+    public function totalGames(): int
+    {
+        return $this->games()->count();
+    }
+
+    public function avgScore(): float
+    {
+        return (float) $this->rounds()->avg('total_score') ?? 0;
+    }
+}

@@ -1,0 +1,229 @@
+/**
+ * API client — Shoot Points
+ * Semua request ke backend Laravel lewat sini.
+ */
+
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://43.134.66.81:8082/api/v1'
+
+const ADMIN_TOKEN_KEY = 'shoot_admin_token'
+const PLAYER_KEY = 'shoot_player'
+
+/** Error dengan payload dari backend */
+export class ApiError extends Error {
+  constructor(message, { code, status, errors } = {}) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code || 'UNKNOWN_ERROR'
+    this.status = status
+    this.errors = errors || {}
+  }
+}
+
+// ---------- token storage ----------
+
+export const adminToken = {
+  get: () => localStorage.getItem(ADMIN_TOKEN_KEY),
+  set: (token) => localStorage.setItem(ADMIN_TOKEN_KEY, token),
+  clear: () => localStorage.removeItem(ADMIN_TOKEN_KEY),
+}
+
+export const playerStorage = {
+  get: () => {
+    try {
+      const raw = localStorage.getItem(PLAYER_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  },
+  set: (player) => localStorage.setItem(PLAYER_KEY, JSON.stringify(player)),
+  clear: () => localStorage.removeItem(PLAYER_KEY),
+}
+
+// ---------- core request ----------
+
+async function request(path, { method = 'GET', body, auth = false, signal } = {}) {
+  const headers = { Accept: 'application/json' }
+
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+
+  if (auth) {
+    const token = adminToken.get()
+    if (!token) {
+      throw new ApiError('Sesi admin tidak ditemukan. Silakan login ulang.', {
+        code: 'MISSING_AUTH_TOKEN',
+        status: 401,
+      })
+    }
+    headers['x-admin-token'] = token
+  }
+
+  let res
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
+    })
+  } catch (err) {
+    if (err.name === 'AbortError') throw err
+    throw new ApiError('Tidak dapat terhubung ke server. Cek koneksi internet.', {
+      code: 'NETWORK_ERROR',
+      status: 0,
+    })
+  }
+
+  let payload = null
+  try {
+    payload = await res.json()
+  } catch {
+    // non-JSON response
+  }
+
+  if (!res.ok || payload?.success === false) {
+    const err = payload?.error || {}
+
+    // Token expired/invalid → bersihkan sesi
+    if (res.status === 401 && auth) adminToken.clear()
+
+    throw new ApiError(err.message || `Request gagal (${res.status})`, {
+      code: err.code,
+      status: res.status,
+      errors: err.errors,
+    })
+  }
+
+  return payload?.data ?? payload
+}
+
+// ---------- PUBLIC ----------
+
+export const api = {
+  /** Registrasi pemain baru */
+  registerPlayer: (name, whatsapp) =>
+    request('/players', { method: 'POST', body: { name, whatsapp } }),
+
+  /** Cek apakah nomor WA sudah terdaftar */
+  lookupPlayer: (whatsapp) =>
+    request(`/players/lookup?whatsapp=${encodeURIComponent(whatsapp)}`),
+
+  /** Detail pemain + riwayat ronde */
+  getPlayer: (id) => request(`/players/${id}`),
+
+  /** Edit data pemain */
+  updatePlayer: (id, data) => request(`/players/${id}`, { method: 'PUT', body: data }),
+
+  /** Leaderboard: scope = all_time | weekly | monthly */
+  getLeaderboard: (scope = 'all_time', signal) => request(`/leaderboard/${scope}`, { signal }),
+
+  /** Statistik publik untuk homepage */
+  getPublicStats: (signal) => request('/stats', { signal }),
+
+  /** Konfigurasi zona + physics game simulasi */
+  getSimulationConfig: (signal) => request('/simulation/config', { signal }),
+
+  /** Submit hasil 1 ronde simulasi (tepat 5 attempt) */
+  submitSimulationRound: (playerId, attempts) =>
+    request('/simulation/rounds', {
+      method: 'POST',
+      body: { player_id: playerId, attempts },
+    }),
+
+  // ---------- ADMIN ----------
+
+  adminLogin: (username, password) =>
+    request('/admin/login', { method: 'POST', body: { username, password } }),
+
+  adminLogout: () => request('/admin/logout', { method: 'POST', auth: true }),
+
+  adminMe: () => request('/admin/me', { auth: true }),
+
+  adminStats: (signal) => request('/admin/stats', { auth: true, signal }),
+
+  adminPlayers: ({ search = '', perPage = 100 } = {}, signal) => {
+    const params = new URLSearchParams()
+    if (search) params.set('search', search)
+    params.set('per_page', String(perPage))
+    return request(`/admin/players?${params}`, { auth: true, signal })
+  },
+
+  adminLogs: ({ perPage = 30 } = {}, signal) =>
+    request(`/admin/logs?per_page=${perPage}`, { auth: true, signal }),
+
+  /** Input 1 attempt skor manual */
+  adminSubmitGame: ({ playerId, attemptNumber, isSuccessful, points, zoneName }) =>
+    request('/admin/games', {
+      method: 'POST',
+      auth: true,
+      body: {
+        player_id: Number(playerId),
+        attempt_number: attemptNumber,
+        is_successful: isSuccessful,
+        points: isSuccessful ? points : 0,
+        zone_name: isSuccessful ? zoneName : null,
+        game_mode: 'manual',
+      },
+    }),
+
+  adminRecentGames: ({ limit = 15 } = {}, signal) =>
+    request(`/admin/games/recent?limit=${limit}`, { auth: true, signal }),
+
+  adminPlayerGames: (playerId, signal) =>
+    request(`/admin/games/player/${playerId}`, { auth: true, signal }),
+
+  adminDeleteRound: (roundId) =>
+    request(`/admin/rounds/${roundId}`, { method: 'DELETE', auth: true }),
+}
+
+/**
+ * Fallback layout papan — dipakai kalau GET /simulation/config gagal.
+ * Harus sinkron dengan backend/config/board.php.
+ */
+export const DEFAULT_BOARD = {
+  max_attempts: 5,
+  max_round_score: 500,
+  canvas: {
+    width: 320,
+    height: 500,
+    board: { x: 24, y: 44, width: 272, height: 296 },
+    ball_start: { x: 160, y: 415 },
+    ball_radius: 11,
+  },
+  physics: {
+    aim_mode: 'slingshot',
+    min_pull: 12,
+    max_pull: 85,
+    power_multiplier: 4.2,
+    aim_drift: 12,
+    power_levels: [
+      { max: 0.35, color: '#22c55e', label: 'Lemah' },
+      { max: 0.70, color: '#f59e0b', label: 'Sedang' },
+      { max: 1.00, color: '#ef4444', label: 'Kuat' },
+    ],
+  },
+  holes: [
+    { id: 'h01', x: 201.4, y: 155.0, radius: 12, points: 100, color: '#2563eb', is_jackpot: true },
+    { id: 'h02', x: 141.0, y: 225.1, radius: 18, points: 20, color: '#ef4444', is_jackpot: false },
+    { id: 'h03', x: 229.1, y: 212.7, radius: 18, points: 15, color: '#06b6d4', is_jackpot: false },
+    { id: 'h04', x: 238.1, y: 256.3, radius: 18, points: 20, color: '#f97316', is_jackpot: false },
+    { id: 'h05', x: 190.2, y: 247.2, radius: 18, points: 10, color: '#eab308', is_jackpot: false },
+    { id: 'h06', x: 252.4, y: 137.2, radius: 18, points: 20, color: '#22c55e', is_jackpot: false },
+    { id: 'h07', x: 142.8, y: 106.3, radius: 18, points: 40, color: '#14b8a6', is_jackpot: false },
+    { id: 'h08', x: 103.5, y: 314.9, radius: 18, points: 10, color: '#3b82f6', is_jackpot: false },
+    { id: 'h09', x: 102.9, y: 130.8, radius: 18, points: 50, color: '#6366f1', is_jackpot: false },
+    { id: 'h10', x: 173.8, y: 293.8, radius: 18, points: 20, color: '#a855f7', is_jackpot: false },
+    { id: 'h11', x: 266.1, y: 296.4, radius: 18, points: 10, color: '#ec4899', is_jackpot: false },
+    { id: 'h12', x: 63.8, y: 248.6, radius: 18, points: 40, color: '#84cc16', is_jackpot: false },
+    { id: 'h13', x: 66.9, y: 97.3, radius: 18, points: 30, color: '#ef4444', is_jackpot: false },
+    { id: 'h14', x: 144.6, y: 169.8, radius: 18, points: 20, color: '#f97316', is_jackpot: false },
+    { id: 'h15', x: 51.1, y: 198.8, radius: 18, points: 30, color: '#eab308', is_jackpot: false },
+    { id: 'h16', x: 90.2, y: 177.7, radius: 18, points: 30, color: '#22c55e', is_jackpot: false },
+    { id: 'h17', x: 187.7, y: 73.3, radius: 18, points: 40, color: '#14b8a6', is_jackpot: false },
+    { id: 'h18', x: 265.2, y: 83.6, radius: 18, points: 50, color: '#3b82f6', is_jackpot: false },
+    { id: 'h19', x: 116.4, y: 271.3, radius: 18, points: 30, color: '#6366f1', is_jackpot: false },
+    { id: 'h20', x: 102.4, y: 72.5, radius: 18, points: 10, color: '#a855f7', is_jackpot: false },
+  ],
+}
+
+export default api
