@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Shield, Users, Gamepad2, Download, Search, Trash2,
-  Plus, AlertCircle, LogOut, Check, X, RotateCcw, ChevronRight
+  Plus, AlertCircle, LogOut, Check, X, RotateCcw, RefreshCw, ChevronRight
 } from 'lucide-react'
 import api, { adminToken } from '../lib/api'
 import useBoardConfig from '../hooks/useBoardConfig'
@@ -16,6 +16,7 @@ const AdminDashboardPage = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [stats, setStats] = useState(null)
   const [players, setPlayers] = useState([])
+  const [playerPagination, setPlayerPagination] = useState(null)
   const [recentRounds, setRecentRounds] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedRombel, setSelectedRombel] = useState('')
@@ -31,6 +32,7 @@ const AdminDashboardPage = () => {
   const [formError, setFormError] = useState('')
   const [roundProgress, setRoundProgress] = useState(null)
   const [attemptHistory, setAttemptHistory] = useState([])
+  const [isLoadingPlayerHistory, setIsLoadingPlayerHistory] = useState(false)
 
   const maxAttempts = board.max_attempts
   const selectedHole = board.holes.find(h => h.id === zoneName) || null
@@ -52,15 +54,16 @@ const AdminDashboardPage = () => {
   }, [navigate])
 
   // ---------- data loading ----------
-  const loadData = useCallback(async (signal) => {
+  const loadData = useCallback(async (signal, rombelOverride = selectedRombel) => {
     try {
       const [statsData, playersData, recentData] = await Promise.all([
         api.adminStats(signal),
-        api.adminPlayers({ perPage: 100 }, signal),
+        api.adminPlayers({ perPage: 1000, page: 1, rombel: rombelOverride }, signal),
         api.adminRecentGames({ limit: 10 }, signal),
       ])
       setStats(statsData)
       setPlayers(playersData.players || [])
+      setPlayerPagination(playersData.pagination || null)
       setRecentRounds(recentData.rounds || [])
       setLoadError('')
     } catch (err) {
@@ -72,13 +75,26 @@ const AdminDashboardPage = () => {
       }
       setLoadError(err.message || 'Gagal memuat data dashboard')
     }
-  }, [navigate])
+  }, [navigate, selectedRombel])
 
   useEffect(() => {
     if (!isAuthenticated) return
     const controller = new AbortController()
     loadData(controller.signal)
     return () => controller.abort()
+  }, [isAuthenticated, loadData])
+
+  // Admin sering membuka dashboard lebih dulu, lalu siswa registrasi dari HP.
+  // Muat ulang saat tab kembali aktif supaya roster tidak stale.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined
+    const refreshOnFocus = () => loadData()
+    window.addEventListener('focus', refreshOnFocus)
+    const interval = window.setInterval(() => loadData(), 10000)
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus)
+      window.clearInterval(interval)
+    }
   }, [isAuthenticated, loadData])
 
   const handleLogout = async () => {
@@ -90,6 +106,12 @@ const AdminDashboardPage = () => {
     adminToken.clear()
     localStorage.removeItem('shoot_admin')
     navigate('/admin/login')
+  }
+
+  const handleRombelChange = (value) => {
+    setSelectedRombel(value)
+    startNewPlayer()
+    loadData(undefined, value)
   }
 
   // ---------- manual score submit ----------
@@ -158,12 +180,50 @@ const AdminDashboardPage = () => {
     setIsSuccessful(true)
   }
 
-  const handlePlayerChange = (id) => {
+  const handlePlayerChange = async (id) => {
     setSelectedPlayerId(id)
     setCurrentAttempt(1)
     setRoundProgress(null)
     setAttemptHistory([])
     setFormError('')
+
+    if (!id) return
+
+    // Muat ronde manual yang sudah ada. Tanpa ini, memilih siswa yang pernah
+    // punya ronde membuat attempt 1 langsung meng-update ronde lengkap dan UI
+    // tampak langsung berubah menjadi "Ganti Pemain".
+    setIsLoadingPlayerHistory(true)
+    try {
+      const data = await api.adminPlayerGames(id)
+      const manualGames = (data.games || []).filter(g => g.game_mode === 'manual')
+      const roundId = manualGames[0]?.round_id
+      const games = manualGames
+        .filter(g => !roundId || g.round_id === roundId)
+        .sort((a, b) => a.attempt_number - b.attempt_number)
+      const history = games.map(g => ({
+        attempt: g.attempt_number,
+        successful: g.is_successful,
+        points: g.points,
+        zone: g.zone_name,
+      }))
+      const total = history.reduce((sum, g) => sum + (g.points || 0), 0)
+      const nextAttempt = Array.from({ length: maxAttempts }, (_, i) => i + 1)
+        .find(n => !history.some(g => g.attempt === n)) || 1
+
+      setAttemptHistory(history)
+      setCurrentAttempt(nextAttempt)
+      setRoundProgress(games.length > 0 ? {
+        id: roundId,
+        player_id: Number(id),
+        total_score: total,
+        attempts_count: games.length,
+        is_complete: games.length >= maxAttempts,
+      } : null)
+    } catch (err) {
+      setFormError(err.message || 'Gagal memuat riwayat ronde siswa')
+    } finally {
+      setIsLoadingPlayerHistory(false)
+    }
   }
 
   const handleDeleteRound = async (roundId) => {
@@ -199,7 +259,10 @@ const AdminDashboardPage = () => {
     URL.revokeObjectURL(url)
   }
 
-  const rombelOptions = [...new Set(players.map(p => p.rombel).filter(Boolean))].sort()
+  const rombelOptions = [...new Set([
+    ...players.map(p => p.rombel).filter(Boolean),
+    ...['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'],
+  ])].sort()
   const filteredPlayers = players.filter(p =>
     (!selectedRombel || p.rombel === selectedRombel) &&
     (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.whatsapp.includes(searchQuery))
@@ -236,6 +299,14 @@ const AdminDashboardPage = () => {
               <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-primary-600" />
               <span className="font-display font-bold text-sm sm:text-lg text-gray-900">Admin Panel</span>
             </div>
+            <button
+              onClick={() => loadData()}
+              className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+              title="Muat ulang data siswa"
+              aria-label="Muat ulang data siswa"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
             <button
               onClick={handleLogout}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-xs sm:text-sm font-medium"
@@ -318,7 +389,7 @@ const AdminDashboardPage = () => {
               <form onSubmit={handleSubmitScore} className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Pilih Rombel *</label>
-                  <select value={selectedRombel} onChange={(e) => { setSelectedRombel(e.target.value); startNewPlayer() }} className="input-field bg-white">
+                  <select value={selectedRombel} onChange={(e) => handleRombelChange(e.target.value)} className="input-field bg-white">
                     <option value="">-- Semua Rombel --</option>
                     {rombelOptions.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
@@ -338,6 +409,11 @@ const AdminDashboardPage = () => {
                       <option key={p.id} value={p.id}>{p.name} · {p.rombel} ({p.whatsapp})</option>
                     ))}
                   </select>
+                  {playerPagination?.total > players.length && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Menampilkan {players.length} dari {playerPagination.total} siswa. Gunakan tab Pemain untuk mencari siswa lain.
+                    </p>
+                  )}
                   {attemptHistory.length > 0 && !roundProgress?.is_complete && (
                     <p className="text-xs text-gray-400 mt-1">
                       Selesaikan 5 percobaan dulu, atau tekan "Ganti Pemain".
@@ -481,10 +557,15 @@ const AdminDashboardPage = () => {
 
                     <button
                       type="submit"
-                      disabled={isSubmitting || !selectedPlayerId}
+                      disabled={isSubmitting || isLoadingPlayerHistory || !selectedPlayerId}
                       className="btn-primary w-full inline-flex items-center justify-center space-x-2 disabled:opacity-60"
                     >
-                      {isSubmitting ? (
+                      {isLoadingPlayerHistory ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Memuat ronde siswa...</span>
+                        </>
+                      ) : isSubmitting ? (
                         <>
                           <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

@@ -106,7 +106,7 @@ class AdminController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
         $rombel = strtoupper(trim((string) $request->query('rombel', '')));
-        $perPage = min((int) $request->query('per_page', 20), 100);
+        $perPage = min((int) $request->query('per_page', 100), 1000);
 
         $query = Player::query()->with(['rounds' => fn ($q) => $q->select('id', 'player_id', 'game_mode', 'total_score')]);
 
