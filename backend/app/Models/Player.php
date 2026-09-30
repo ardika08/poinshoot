@@ -10,6 +10,7 @@ class Player extends Model
     protected $fillable = [
         'name',
         'whatsapp',
+        'rombel',
         'is_active',
     ];
 
@@ -43,5 +44,15 @@ class Player extends Model
     public function avgScore(): float
     {
         return (float) $this->rounds()->avg('total_score') ?? 0;
+    }
+
+    public function officialScore(string $mode): int
+    {
+        return (int) ($this->rounds()->where('game_mode', $mode)->value('total_score') ?? 0);
+    }
+
+    public function finalScore(): int
+    {
+        return $this->officialScore('manual') + $this->officialScore('simulation');
     }
 }

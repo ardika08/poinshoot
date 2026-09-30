@@ -20,6 +20,7 @@ class UpdatePlayerRequest extends FormRequest
 
         return [
             'name' => ['sometimes', 'required', 'string', 'min:3', 'max:100'],
+            'rombel' => ['sometimes', 'required', 'string', 'regex:/^[1-6][A-Z]$/', 'max:10'],
             'whatsapp' => [
                 'sometimes',
                 'required',
@@ -37,6 +38,7 @@ class UpdatePlayerRequest extends FormRequest
             'name.max' => 'Nama maksimal 100 karakter',
             'whatsapp.regex' => 'Format nomor WhatsApp tidak valid (contoh: 081234567890)',
             'whatsapp.unique' => 'Nomor WhatsApp sudah digunakan pemain lain',
+            'rombel.regex' => 'Format rombel harus seperti 4A atau 4B',
         ];
     }
 
@@ -50,6 +52,10 @@ class UpdatePlayerRequest extends FormRequest
 
         if ($this->has('name')) {
             $this->merge(['name' => trim((string) $this->name)]);
+        }
+
+        if ($this->has('rombel')) {
+            $this->merge(['rombel' => strtoupper(trim((string) $this->rombel))]);
         }
     }
 

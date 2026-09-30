@@ -105,11 +105,14 @@ class AdminController extends Controller
     public function players(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
+        $rombel = strtoupper(trim((string) $request->query('rombel', '')));
         $perPage = min((int) $request->query('per_page', 20), 100);
 
-        $query = Player::query()
-            ->withCount('rounds')
-            ->withMax('rounds as best_score', 'total_score');
+        $query = Player::query()->with(['rounds' => fn ($q) => $q->select('id', 'player_id', 'game_mode', 'total_score')]);
+
+        if ($rombel !== '') {
+            $query->where('rombel', $rombel);
+        }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -123,15 +126,24 @@ class AdminController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'players' => collect($players->items())->map(fn ($p) => [
+                'players' => collect($players->items())->map(function ($p) {
+                    $manualRound = $p->rounds->firstWhere('game_mode', 'manual');
+                    $simulationRound = $p->rounds->firstWhere('game_mode', 'simulation');
+                    $manual = (int) ($manualRound?->total_score ?? 0);
+                    $simulation = (int) ($simulationRound?->total_score ?? 0);
+                    return [
                     'id' => $p->id,
                     'name' => $p->name,
                     'whatsapp' => $p->whatsapp,
-                    'rounds_count' => $p->rounds_count,
-                    'best_score' => (int) ($p->best_score ?? 0),
+                    'rombel' => $p->rombel,
+                    'rounds_count' => $p->rounds->count(),
+                    'manual_score' => $manual,
+                    'simulation_score' => $simulation,
+                    'final_score' => $manual + $simulation,
+                    'completion_status' => ($manualRound && $simulationRound) ? 'complete' : (($manualRound || $simulationRound) ? 'partial' : 'not_started'),
                     'is_active' => $p->is_active,
                     'created_at' => $p->created_at?->toIso8601String(),
-                ]),
+                ]; }),
                 'pagination' => [
                     'current_page' => $players->currentPage(),
                     'last_page' => $players->lastPage(),

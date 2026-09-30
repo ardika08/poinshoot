@@ -49,6 +49,16 @@ class SimulationController extends Controller
 
         $data = $validator->validated();
 
+        if (Round::where('player_id', $data['player_id'])->where('game_mode', 'simulation')->exists()) {
+            return response()->json([
+                'success' => false,
+                'error' => [
+                    'code' => 'SIMULATION_ALREADY_COMPLETED',
+                    'message' => 'Ronde simulasi resmi siswa ini sudah pernah diselesaikan',
+                ],
+            ], 409);
+        }
+
         $round = DB::transaction(function () use ($data, $request) {
             $round = Round::create([
                 'player_id' => $data['player_id'],

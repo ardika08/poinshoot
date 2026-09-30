@@ -24,10 +24,10 @@ class GameController extends Controller
         $data = $request->validated();
 
         $result = DB::transaction(function () use ($data, $admin) {
-            // Pakai round aktif (belum 5 attempt) atau buat baru
+            // Satu ronde resmi manual per siswa. Ronde selesai tetap dipakai saat
+            // admin mengoreksi attempt 1..5, tidak membuat ronde kedua.
             $round = Round::where('player_id', $data['player_id'])
                 ->where('is_archived', false)
-                ->whereNull('end_time')
                 ->where('game_mode', $data['game_mode'])
                 ->orderByDesc('created_at')
                 ->first();
@@ -163,7 +163,7 @@ class GameController extends Controller
     {
         $limit = min((int) $request->query('limit', 15), 50);
 
-        $rounds = Round::with('player:id,name')
+        $rounds = Round::with('player:id,name,rombel')
             ->whereNotNull('end_time')
             ->orderByDesc('end_time')
             ->limit($limit)
@@ -171,6 +171,7 @@ class GameController extends Controller
             ->map(fn ($r) => [
                 'id' => $r->id,
                 'player_name' => $r->player->name ?? 'Unknown',
+                'rombel' => $r->player->rombel,
                 'total_score' => $r->total_score,
                 'attempts_count' => $r->attempts_count,
                 'game_mode' => $r->game_mode,

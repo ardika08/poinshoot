@@ -67,7 +67,7 @@ const LeaderboardPage = () => {
           <Trophy className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-500" fill="currentColor" />
           <div className="text-left">
             <h1 className="text-base sm:text-lg font-display font-bold text-gray-900">Leaderboard</h1>
-            <p className="text-xs text-gray-500 hidden sm:block">Ranking skor tertinggi</p>
+            <p className="text-xs text-gray-500 hidden sm:block">Skor final manual + simulasi</p>
           </div>
         </motion.div>
 
@@ -113,7 +113,7 @@ const LeaderboardPage = () => {
                     {pos.player?.name?.split(' ')[0]}
                   </h3>
                   <p className={`font-bold ${pos.rank === 1 ? 'text-xs sm:text-sm' : 'text-xs'} ${pos.rank === 1 ? 'text-yellow-800' : 'text-gray-600'}`}>
-                    {pos.player?.total_score} pts
+                    {pos.player?.final_score} pts
                   </p>
                 </div>
               </div>
@@ -180,15 +180,15 @@ const LeaderboardPage = () => {
 
                 {/* Player name */}
                 <div className="flex-grow min-w-0">
-                  <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">{player.name}</h3>
+                  <h3 className="font-semibold text-sm sm:text-base text-gray-900 truncate">{player.name} <span className="text-xs text-primary-600">{player.rombel}</span></h3>
                   <p className="text-xs text-gray-400">
-                    {new Date(player.achieved_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    {player.achieved_date ? new Date(player.achieved_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : 'Belum lengkap'}
                   </p>
                 </div>
 
                 {/* Score */}
                 <div className="text-right shrink-0">
-                  <div className="text-lg sm:text-xl font-display font-bold text-primary-600">{player.total_score}</div>
+                  <div className="text-lg sm:text-xl font-display font-bold text-primary-600">{player.final_score}</div>
                   <div className="text-xs text-gray-400 uppercase">pts</div>
                 </div>
               </motion.div>

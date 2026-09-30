@@ -18,6 +18,7 @@ class PlayerController extends Controller
         $player = Player::create([
             'name' => $request->validated('name'),
             'whatsapp' => $request->validated('whatsapp'),
+            'rombel' => $request->validated('rombel'),
             'is_active' => true,
         ]);
 
@@ -59,7 +60,10 @@ class PlayerController extends Controller
             return $this->notFound();
         }
 
-        $bestRound = $player->rounds->max('total_score') ?? 0;
+        $manualRound = $player->rounds->firstWhere('game_mode', 'manual');
+        $simulationRound = $player->rounds->firstWhere('game_mode', 'simulation');
+        $manualScore = (int) ($manualRound?->total_score ?? 0);
+        $simulationScore = (int) ($simulationRound?->total_score ?? 0);
 
         return response()->json([
             'success' => true,
@@ -67,7 +71,10 @@ class PlayerController extends Controller
                 ...$this->transform($player),
                 'stats' => [
                     'total_rounds' => $player->rounds()->count(),
-                    'best_score' => (int) $bestRound,
+                    'manual_score' => $manualScore,
+                    'simulation_score' => $simulationScore,
+                    'final_score' => $manualScore + $simulationScore,
+                    'completion_status' => ($manualRound && $simulationRound) ? 'complete' : (($manualRound || $simulationRound) ? 'partial' : 'not_started'),
                     'avg_score' => round((float) $player->rounds()->avg('total_score'), 1),
                 ],
                 'rounds' => $player->rounds->map(fn ($r) => [
@@ -113,6 +120,7 @@ class PlayerController extends Controller
             'id' => $player->id,
             'name' => $player->name,
             'whatsapp' => $player->whatsapp,
+            'rombel' => $player->rombel,
             'is_active' => $player->is_active,
             'created_at' => $player->created_at?->toIso8601String(),
         ];

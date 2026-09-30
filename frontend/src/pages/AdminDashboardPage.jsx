@@ -18,6 +18,7 @@ const AdminDashboardPage = () => {
   const [players, setPlayers] = useState([])
   const [recentRounds, setRecentRounds] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedRombel, setSelectedRombel] = useState('')
   const [loadError, setLoadError] = useState('')
 
   // --- Manual score input state ---
@@ -177,13 +178,15 @@ const AdminDashboardPage = () => {
 
   const handleExport = () => {
     const rows = [
-      ['Nama', 'WhatsApp', 'Jumlah Ronde', 'Skor Terbaik', 'Terdaftar'],
+      ['Nama', 'Rombel', 'WhatsApp', 'Manual', 'Simulasi', 'Skor Final', 'Status'],
       ...filteredPlayers.map(p => [
         p.name,
+        p.rombel,
         p.whatsapp,
-        p.rounds_count,
-        p.best_score,
-        new Date(p.created_at).toLocaleDateString('id-ID'),
+        p.manual_score,
+        p.simulation_score,
+        p.final_score,
+        p.completion_status,
       ]),
     ]
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -196,9 +199,10 @@ const AdminDashboardPage = () => {
     URL.revokeObjectURL(url)
   }
 
+  const rombelOptions = [...new Set(players.map(p => p.rombel).filter(Boolean))].sort()
   const filteredPlayers = players.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.whatsapp.includes(searchQuery)
+    (!selectedRombel || p.rombel === selectedRombel) &&
+    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.whatsapp.includes(searchQuery))
   )
 
   if (!isAuthenticated) {
@@ -312,6 +316,14 @@ const AdminDashboardPage = () => {
           >
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3.5 sm:p-4">
               <form onSubmit={handleSubmitScore} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Pilih Rombel *</label>
+                  <select value={selectedRombel} onChange={(e) => { setSelectedRombel(e.target.value); startNewPlayer() }} className="input-field bg-white">
+                    <option value="">-- Semua Rombel --</option>
+                    {rombelOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+
                 {/* Player Select */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Pilih Pemain *</label>
@@ -322,8 +334,8 @@ const AdminDashboardPage = () => {
                     disabled={attemptHistory.length > 0 && !roundProgress?.is_complete}
                   >
                     <option value="">-- Pilih Pemain --</option>
-                    {players.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.whatsapp})</option>
+                    {filteredPlayers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} · {p.rombel} ({p.whatsapp})</option>
                     ))}
                   </select>
                   {attemptHistory.length > 0 && !roundProgress?.is_complete && (
@@ -352,9 +364,7 @@ const AdminDashboardPage = () => {
                             key={n}
                             className={`flex-1 h-9 rounded flex flex-col items-center justify-center border leading-none ${
                               logged
-                                ? isZonk
-                                  ? 'bg-gray-100 border-gray-300 text-gray-500'
-                                  : logged.successful
+                                ? logged.successful
                                     ? 'bg-green-100 border-green-300 text-green-700'
                                     : 'bg-red-50 border-red-200 text-red-600'
                                 : n === currentAttempt
@@ -514,15 +524,15 @@ const AdminDashboardPage = () => {
           className="mb-5 sm:mb-6"
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="relative flex-grow mr-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Cari nama atau WA..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 text-sm"
-              />
+            <div className="flex flex-grow gap-2 mr-2">
+              <select value={selectedRombel} onChange={(e) => setSelectedRombel(e.target.value)} className="px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                <option value="">Semua</option>
+                {rombelOptions.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input type="text" placeholder="Cari nama atau WA..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 text-sm" />
+              </div>
             </div>
             <button
               onClick={handleExport}
@@ -546,12 +556,11 @@ const AdminDashboardPage = () => {
               <div key={player.id} className="bg-white rounded-xl shadow-sm p-3 border border-gray-100 flex items-center justify-between">
                 <div className="min-w-0 flex-grow">
                   <h3 className="font-semibold text-sm text-gray-900 truncate">{player.name}</h3>
-                  <p className="text-xs text-gray-400">{player.whatsapp}</p>
+                  <p className="text-xs text-gray-400">{player.rombel} · {player.whatsapp}</p>
                   <div className="flex items-center space-x-2 mt-0.5">
-                    <span className="text-xs text-gray-400">{player.rounds_count} ronde</span>
-                    {player.best_score > 0 && (
-                      <span className="text-xs font-semibold text-primary-600">best {player.best_score} pts</span>
-                    )}
+                    <span className="text-xs text-gray-500">Manual {player.manual_score}</span>
+                    <span className="text-xs text-gray-500">Sim {player.simulation_score}</span>
+                    <span className="text-xs font-semibold text-primary-600">Final {player.final_score}</span>
                   </div>
                 </div>
                 <button

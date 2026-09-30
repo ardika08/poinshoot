@@ -30,13 +30,15 @@ check "GET players/9999"         404 "$(code $BASE/players/9999)"
 check "GET players/lookup"       200 "$(code "$BASE/players/lookup?whatsapp=081234567800")"
 
 echo "=== VALIDATION ==="
-check "POST players (invalid WA)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"Test User","whatsapp":"123"}')"
-check "POST players (dup WA)"     409 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"Test User","whatsapp":"081234567800"}')"
-check "POST players (short name)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"AB\",\"whatsapp\":\"$WA_NEW\"}")"
-check "POST players (valid)"      201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Zaki Tester\",\"whatsapp\":\"$WA_NEW\"}")"
+check "POST players (invalid WA)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"Test User","whatsapp":"123","rombel":"4A"}')"
+check "POST players (dup WA)"     409 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"Test User","whatsapp":"081234567800","rombel":"4A"}')"
+check "POST players (short name)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"AB\",\"whatsapp\":\"$WA_NEW\",\"rombel\":\"4A\"}")"
+check "POST players (valid)"      201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Zaki Tester\",\"whatsapp\":\"$WA_NEW\",\"rombel\":\"4A\"}")"
 NEW_ID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
-check "PUT players/$NEW_ID"       200 "$(code -X PUT $BASE/players/$NEW_ID -H 'Content-Type: application/json' -d '{"name":"Zaki Updated"}')"
-check "POST players (+62 norm)"   201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Norm Test\",\"whatsapp\":\"$WA_INTL\"}")"
+check "PUT players/$NEW_ID"       200 "$(code -X PUT $BASE/players/$NEW_ID -H 'Content-Type: application/json' -d '{"name":"Zaki Updated","rombel":"4A"}')"
+check "GET players/$NEW_ID (scores)" 200 "$(code $BASE/players/$NEW_ID)"
+check "POST players (+62 norm)"   201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Norm Test\",\"whatsapp\":\"$WA_INTL\",\"rombel\":\"4B\"}")"
+SIM_ID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
 
 echo "=== ADMIN AUTH ==="
 check "POST admin/login (bad)"  401 "$(code -X POST $BASE/admin/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"wrong"}')"
@@ -63,6 +65,9 @@ echo "  -> round result: $(python3 -c "import json;d=json.load(open('/tmp/resp.j
 echo "=== SIMULATION ==="
 check "POST simulation/rounds" 201 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":true,\"points\":100,\"zone_name\":\"h01\"},{\"attempt_number\":2,\"is_successful\":true,\"points\":30,\"zone_name\":\"h13\"},{\"attempt_number\":3,\"is_successful\":false,\"points\":0},{\"attempt_number\":4,\"is_successful\":true,\"points\":20,\"zone_name\":\"h02\"},{\"attempt_number\":5,\"is_successful\":true,\"points\":15,\"zone_name\":\"h03\"}]}")"
 echo "  -> $(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(f\"score={d['round']['total_score']} rank={d['estimated_rank']} podium={d['is_podium']}\")")"
+check "GET player final score" 200 "$(code $BASE/players/$NEW_ID)"
+check "  final = manual 150 + simulasi 165" 315 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['stats']['final_score'])")"
+check "  status dua mode complete" complete "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['stats']['completion_status'])")"
 check "POST simulation (only 3 attempts)" 422 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":true,\"points\":10}]}")"
 
 echo "=== VALIDASI PAPAN ==="
@@ -76,7 +81,7 @@ check "h03 dgn poin palsu"        422 "$(code -X POST $BASE/admin/games -H 'Cont
 
 echo "=== RONDE MANUAL LENGKAP (jackpot + bonus + meleset) ==="
 # pemain baru supaya ronde bersih
-code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Ronde Tester\",\"whatsapp\":\"0813${SUF}7\"}" >/dev/null
+code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Ronde Tester\",\"whatsapp\":\"0813${SUF}7\",\"rombel\":\"5A\"}" >/dev/null
 RID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
 g() { code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$RID,\"attempt_number\":$4,\"is_successful\":$3,\"points\":$2,\"zone_name\":\"$1\",\"game_mode\":\"manual\"}"; }
 check "att1 jackpot h01 (100)" 201 "$(g h01 100 true 1)"
@@ -87,8 +92,8 @@ check "att5 h18 (50)"          201 "$(g h18 50 true 5)"
 check "  total ronde (100+10+15+0+50)" 175 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['round']['total_score'])")"
 check "  ronde ditutup"        True "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['round']['is_complete'])")"
 
-check "simulasi poin dimanipulasi diabaikan" 201 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":true,\"points\":9999,\"zone_name\":\"h20\"},{\"attempt_number\":2,\"is_successful\":false,\"points\":9999},{\"attempt_number\":3,\"is_successful\":false,\"points\":0},{\"attempt_number\":4,\"is_successful\":false,\"points\":0},{\"attempt_number\":5,\"is_successful\":false,\"points\":0}]}")"
-check "  -> tersimpan 10 (bukan 9999)" 10 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['round']['total_score'])")"
+# NEW_ID sudah punya ronde simulasi resmi — percobaan kedua wajib ditolak.
+check "simulasi kedua ditolak" 409 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":false},{\"attempt_number\":2,\"is_successful\":false},{\"attempt_number\":3,\"is_successful\":false},{\"attempt_number\":4,\"is_successful\":false},{\"attempt_number\":5,\"is_successful\":false}]}")"
 check "simulasi lubang tak dikenal" 422 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":true,\"points\":10,\"zone_name\":\"h99\"},{\"attempt_number\":2,\"is_successful\":false,\"points\":0},{\"attempt_number\":3,\"is_successful\":false,\"points\":0},{\"attempt_number\":4,\"is_successful\":false,\"points\":0},{\"attempt_number\":5,\"is_successful\":false,\"points\":0}]}")"
 
 echo "=== LOGOUT ==="

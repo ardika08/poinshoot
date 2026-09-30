@@ -101,8 +101,8 @@ async function request(path, { method = 'GET', body, auth = false, signal } = {}
 
 export const api = {
   /** Registrasi pemain baru */
-  registerPlayer: (name, whatsapp) =>
-    request('/players', { method: 'POST', body: { name, whatsapp } }),
+  registerPlayer: (name, whatsapp, rombel) =>
+    request('/players', { method: 'POST', body: { name, whatsapp, rombel } }),
 
   /** Cek apakah nomor WA sudah terdaftar */
   lookupPlayer: (whatsapp) =>
@@ -141,9 +141,10 @@ export const api = {
 
   adminStats: (signal) => request('/admin/stats', { auth: true, signal }),
 
-  adminPlayers: ({ search = '', perPage = 100 } = {}, signal) => {
+  adminPlayers: ({ search = '', rombel = '', perPage = 100 } = {}, signal) => {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
+    if (rombel) params.set('rombel', rombel)
     params.set('per_page', String(perPage))
     return request(`/admin/players?${params}`, { auth: true, signal })
   },

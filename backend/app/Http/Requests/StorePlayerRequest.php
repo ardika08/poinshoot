@@ -18,6 +18,7 @@ class StorePlayerRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'min:3', 'max:100'],
             'whatsapp' => ['required', 'string', 'regex:/^08[0-9]{8,11}$/', 'unique:players,whatsapp'],
+            'rombel' => ['required', 'string', 'regex:/^[1-6][A-Z]$/', 'max:10'],
         ];
     }
 
@@ -30,6 +31,8 @@ class StorePlayerRequest extends FormRequest
             'whatsapp.required' => 'Nomor WhatsApp wajib diisi',
             'whatsapp.regex' => 'Format nomor WhatsApp tidak valid (contoh: 081234567890)',
             'whatsapp.unique' => 'Nomor WhatsApp sudah terdaftar',
+            'rombel.required' => 'Rombel wajib dipilih',
+            'rombel.regex' => 'Format rombel harus seperti 4A atau 4B',
         ];
     }
 
@@ -44,6 +47,10 @@ class StorePlayerRequest extends FormRequest
 
         if ($this->has('name')) {
             $this->merge(['name' => trim((string) $this->name)]);
+        }
+
+        if ($this->has('rombel')) {
+            $this->merge(['rombel' => strtoupper(trim((string) $this->rombel))]);
         }
     }
 

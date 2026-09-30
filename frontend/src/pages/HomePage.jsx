@@ -12,7 +12,8 @@ const HomePage = () => {
   const maxAttempts = board.max_attempts
   const [formData, setFormData] = useState({
     name: '',
-    whatsapp: ''
+    whatsapp: '',
+    rombel: ''
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -39,6 +40,10 @@ const HomePage = () => {
       setError('Nomor WhatsApp format 08xxxxxxxxxx (minimal 10 digit)')
       return false
     }
+    if (!/^[1-6][A-Z]$/.test(formData.rombel)) {
+      setError('Pilih rombel siswa, contoh 4A atau 4B')
+      return false
+    }
     setError('')
     return true
   }
@@ -51,11 +56,12 @@ const HomePage = () => {
     setError('')
 
     try {
-      const player = await api.registerPlayer(formData.name.trim(), formData.whatsapp)
+      const player = await api.registerPlayer(formData.name.trim(), formData.whatsapp, formData.rombel)
       playerStorage.set({
         id: player.id,
         name: player.name,
         whatsapp: player.whatsapp,
+        rombel: player.rombel,
         registeredAt: player.created_at,
       })
       setSuccess(true)
@@ -70,6 +76,7 @@ const HomePage = () => {
               id: player.id,
               name: player.name,
               whatsapp: player.whatsapp,
+              rombel: player.rombel,
               registeredAt: player.created_at,
             })
             setSuccess(true)
@@ -228,6 +235,14 @@ const HomePage = () => {
                     className="input-field"
                     maxLength={100}
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="rombel" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">Rombel</label>
+                  <select id="rombel" name="rombel" value={formData.rombel} onChange={handleChange} className="input-field bg-white">
+                    <option value="">-- Pilih Rombel --</option>
+                    {[1,2,3,4,5,6].flatMap(k => ['A','B'].map(r => `${k}${r}`)).map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
                 </div>
 
                 <div>
