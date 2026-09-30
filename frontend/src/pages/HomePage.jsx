@@ -12,7 +12,6 @@ const HomePage = () => {
   const maxAttempts = board.max_attempts
   const [formData, setFormData] = useState({
     name: '',
-    whatsapp: '',
     rombel: ''
   })
   const [error, setError] = useState('')
@@ -36,10 +35,6 @@ const HomePage = () => {
       setError('Nama minimal 3 karakter')
       return false
     }
-    if (!formData.whatsapp || !/^08[0-9]{8,11}$/.test(formData.whatsapp)) {
-      setError('Nomor WhatsApp format 08xxxxxxxxxx (minimal 10 digit)')
-      return false
-    }
     if (!/^[1-6][A-Z]$/.test(formData.rombel)) {
       setError('Pilih rombel siswa, contoh 4A atau 4B')
       return false
@@ -56,22 +51,36 @@ const HomePage = () => {
     setError('')
 
     try {
-      const player = await api.registerPlayer(formData.name.trim(), formData.whatsapp, formData.rombel)
+      const player = await api.registerPlayer(formData.name.trim(), formData.rombel)
       playerStorage.set({
         id: player.id,
         name: player.name,
-        whatsapp: player.whatsapp,
         rombel: player.rombel,
         registeredAt: player.created_at,
       })
       setSuccess(true)
       setTimeout(() => navigate('/play'), 1200)
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'DUPLICATE_WHATSAPP') {
-        // Nomor sudah terdaftar. Untuk konteks sekolah, jangan diam-diam pakai
-        // akun lama — nama di layar game & admin bisa jadi orang yang berbeda.
-        // Tampilkan pesan jelas supaya operator pakai nomor lain.
-        setError('Nomor WhatsApp ini sudah terdaftar. Setiap siswa harus memakai nomor berbeda. Hubungi admin jika nomor ini milik siswa tersebut.')
+      if (err instanceof ApiError && err.code === 'DUPLICATE_PLAYER') {
+        // Nama + rombel ini sudah terdaftar → siswa yang sama mendaftar ulang.
+        // Lanjutkan ke akun yang sudah ada supaya skor manual + simulasi menyatu.
+        try {
+          const { player: existing } = await api.lookupPlayer(formData.name.trim(), formData.rombel)
+          if (existing) {
+            playerStorage.set({
+              id: existing.id,
+              name: existing.name,
+              rombel: existing.rombel,
+              registeredAt: existing.created_at,
+            })
+            setSuccess(true)
+            setTimeout(() => navigate('/play'), 1200)
+            return
+          }
+        } catch {
+          // fallthrough ke pesan error
+        }
+        setError('Nama ini sudah terdaftar di rombel tersebut. Hubungi admin jika ini bukan kamu.')
       } else {
         setError(err.message || 'Gagal mendaftar. Coba lagi.')
       }
@@ -81,14 +90,7 @@ const HomePage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    if (name === 'whatsapp') {
-      const cleaned = value.replace(/\D/g, '')
-      let formatted = cleaned.startsWith('0') ? cleaned : '0' + cleaned
-      formatted = formatted.substring(0, 13)
-      setFormData(prev => ({ ...prev, whatsapp: formatted }))
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }))
-    }
+    setFormData(prev => ({ ...prev, [name]: value }))
     setError('')
   }
 
@@ -228,24 +230,6 @@ const HomePage = () => {
                     <option value="">-- Pilih Rombel --</option>
                     {[1,2,3,4,5,6].flatMap(k => ['A','B'].map(r => `${k}${r}`)).map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
-                </div>
-
-                <div>
-                  <label htmlFor="whatsapp" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">
-                    Nomor WhatsApp
-                  </label>
-                  <input
-                    type="tel"
-                    id="whatsapp"
-                    name="whatsapp"
-                    value={formData.whatsapp}
-                    onChange={handleChange}
-                    placeholder="08xxxxxxxxxx"
-                    className="input-field"
-                    maxLength={13}
-                    inputMode="numeric"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Format: 08xxxxxxxxxx</p>
                 </div>
 
                 {error && (

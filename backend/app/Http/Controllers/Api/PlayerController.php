@@ -17,7 +17,6 @@ class PlayerController extends Controller
     {
         $player = Player::create([
             'name' => $request->validated('name'),
-            'whatsapp' => $request->validated('whatsapp'),
             'rombel' => $request->validated('rombel'),
             'is_active' => true,
         ]);
@@ -89,21 +88,25 @@ class PlayerController extends Controller
     }
 
     /**
-     * GET /api/v1/players/lookup?whatsapp=08xxx — cek nomor sudah terdaftar
+     * GET /api/v1/players/lookup?name=Budi&rombel=4A
+     * Cek apakah siswa dengan nama+rombel ini sudah terdaftar.
+     * Dipakai frontend saat registrasi duplikat: lanjutkan ke akun yang sudah ada.
      */
     public function lookup(Request $request)
     {
-        $wa = preg_replace('/[^0-9+]/', '', (string) $request->query('whatsapp', ''));
-        $wa = preg_replace('/^\+?62/', '0', $wa);
+        $name = trim((string) $request->query('name', ''));
+        $rombel = strtoupper(trim((string) $request->query('rombel', '')));
 
-        if (! $wa) {
+        if ($name === '' || $rombel === '') {
             return response()->json([
                 'success' => false,
-                'error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Parameter whatsapp wajib diisi'],
+                'error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Parameter name dan rombel wajib diisi'],
             ], 422);
         }
 
-        $player = Player::where('whatsapp', $wa)->first();
+        $player = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->where('rombel', $rombel)
+            ->first();
 
         return response()->json([
             'success' => true,
@@ -119,7 +122,6 @@ class PlayerController extends Controller
         return [
             'id' => $player->id,
             'name' => $player->name,
-            'whatsapp' => $player->whatsapp,
             'rombel' => $player->rombel,
             'is_active' => $player->is_active,
             'created_at' => $player->created_at?->toIso8601String(),

@@ -214,7 +214,7 @@ const LeaderboardPage = () => {
           <h3 className="font-semibold text-xs sm:text-sm text-blue-900">Privasi Terlindungi</h3>
         </div>
         <p className="text-xs text-blue-700 leading-relaxed">
-          Nomor WhatsApp tidak ditampilkan untuk keamanan siswa SD. Hanya nama yang tampil di leaderboard.
+          Data siswa hanya berisi nama dan kelas. Nama yang tampil di leaderboard adalah nama yang didaftarkan saat bermain.
         </p>
       </div>
     </div>

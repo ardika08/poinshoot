@@ -101,12 +101,12 @@ async function request(path, { method = 'GET', body, auth = false, signal } = {}
 
 export const api = {
   /** Registrasi pemain baru */
-  registerPlayer: (name, whatsapp, rombel) =>
-    request('/players', { method: 'POST', body: { name, whatsapp, rombel } }),
+  registerPlayer: (name, rombel) =>
+    request('/players', { method: 'POST', body: { name, rombel } }),
 
-  /** Cek apakah nomor WA sudah terdaftar */
-  lookupPlayer: (whatsapp) =>
-    request(`/players/lookup?whatsapp=${encodeURIComponent(whatsapp)}`),
+  /** Cek apakah siswa (nama + rombel) sudah terdaftar */
+  lookupPlayer: (name, rombel) =>
+    request(`/players/lookup?name=${encodeURIComponent(name)}&rombel=${encodeURIComponent(rombel)}`),
 
   /** Detail pemain + riwayat ronde */
   getPlayer: (id) => request(`/players/${id}`),

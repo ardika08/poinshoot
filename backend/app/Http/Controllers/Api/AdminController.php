@@ -115,10 +115,7 @@ class AdminController extends Controller
         }
 
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('whatsapp', 'like', "%{$search}%");
-            });
+            $query->where('name', 'like', "%{$search}%");
         }
 
         $players = $query->orderByDesc('created_at')->paginate($perPage);
@@ -134,7 +131,6 @@ class AdminController extends Controller
                     return [
                     'id' => $p->id,
                     'name' => $p->name,
-                    'whatsapp' => $p->whatsapp,
                     'rombel' => $p->rombel,
                     'rounds_count' => $p->rounds->count(),
                     'manual_score' => $manual,

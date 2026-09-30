@@ -24,12 +24,11 @@ class DummyDataSeeder extends Seeder
     {
         $maxAttempts = BoardConfig::maxAttempts();
         $weighted = $this->weightedHoles();
-        $waCounter = 81234567800;
 
         foreach (self::NAMES as $i => $name) {
             $player = Player::create([
                 'name' => $name,
-                'whatsapp' => '0' . ($waCounter + $i),
+                'rombel' => ['4A', '4B', '5A', '5B', '6A', '6B'][$i % 6],
                 'is_active' => true,
                 'created_at' => now()->subDays(rand(0, 45)),
             ]);

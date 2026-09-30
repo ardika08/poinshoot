@@ -14,10 +14,12 @@ check() {
 
 code() { curl -s -o /tmp/resp.json -w "%{http_code}" "$@"; }
 
-# Nomor WA unik tiap run supaya test idempotent
+# Suffix unik tiap run supaya test idempotent (identitas pemain = nama + rombel)
 SUF=$(printf "%06d" $((RANDOM % 1000000)))
-WA_NEW="0819${SUF}99"
-WA_INTL="+62817${SUF}7"
+NAME_A="Test User $SUF"
+NAME_B="Zaki Tester $SUF"
+NAME_B_UP="Zaki Updated $SUF"
+NAME_D="Ronde Tester $SUF"
 
 echo "=== PUBLIC ==="
 check "GET leaderboard/all_time" 200 "$(code $BASE/leaderboard/all_time)"
@@ -27,18 +29,23 @@ check "GET leaderboard/invalid"  404 "$(code $BASE/leaderboard/bogus)"
 check "GET simulation/config"    200 "$(code $BASE/simulation/config)"
 check "GET players/1"            200 "$(code $BASE/players/1)"
 check "GET players/9999"         404 "$(code $BASE/players/9999)"
-check "GET players/lookup"       200 "$(code "$BASE/players/lookup?whatsapp=081234567800")"
+check "GET players/lookup (found)" 200 "$(code -G "$BASE/players/lookup" --data-urlencode "name=Andi" --data-urlencode "rombel=4A")"
+check "GET players/lookup (no param)" 422 "$(code "$BASE/players/lookup")"
 
 echo "=== VALIDATION ==="
-check "POST players (invalid WA)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"Test User","whatsapp":"123","rombel":"4A"}')"
-check "POST players (dup WA)"     409 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"Test User","whatsapp":"081234567800","rombel":"4A"}')"
-check "POST players (short name)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"AB\",\"whatsapp\":\"$WA_NEW\",\"rombel\":\"4A\"}")"
-check "POST players (valid)"      201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Zaki Tester\",\"whatsapp\":\"$WA_NEW\",\"rombel\":\"4A\"}")"
+check "POST players (rombel invalid)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_A\",\"rombel\":\"9Z\"}")"
+check "POST players (rombel kosong)"  422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_A\"}")"
+check "POST players (short name)" 422 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d '{"name":"AB","rombel":"4A"}')"
+check "POST players (valid)"      201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B\",\"rombel\":\"4A\"}")"
 NEW_ID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
-check "PUT players/$NEW_ID"       200 "$(code -X PUT $BASE/players/$NEW_ID -H 'Content-Type: application/json' -d '{"name":"Zaki Updated","rombel":"4A"}')"
+check "POST players (nama+rombel sama)" 409 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B\",\"rombel\":\"4A\"}")"
+check "POST players (nama sama rombel beda)" 201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B\",\"rombel\":\"4B\"}")"
+check "PUT players/$NEW_ID"       200 "$(code -X PUT $BASE/players/$NEW_ID -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B_UP\",\"rombel\":\"4A\"}")"
 check "GET players/$NEW_ID (scores)" 200 "$(code $BASE/players/$NEW_ID)"
-check "POST players (+62 norm)"   201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Norm Test\",\"whatsapp\":\"$WA_INTL\",\"rombel\":\"4B\"}")"
-SIM_ID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
+code -G "$BASE/players/lookup" --data-urlencode "name=$NAME_B_UP" --data-urlencode "rombel=4A" >/dev/null
+check "  lookup.exists = true" True "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['exists'])")"
+code -G "$BASE/players/lookup" --data-urlencode "name=Tidak Ada $SUF" --data-urlencode "rombel=4A" >/dev/null
+check "  lookup.exists = false" False "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['exists'])")"
 
 echo "=== ADMIN AUTH ==="
 check "POST admin/login (bad)"  401 "$(code -X POST $BASE/admin/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"wrong"}')"
@@ -81,7 +88,7 @@ check "h03 dgn poin palsu"        422 "$(code -X POST $BASE/admin/games -H 'Cont
 
 echo "=== RONDE MANUAL LENGKAP (jackpot + bonus + meleset) ==="
 # pemain baru supaya ronde bersih
-code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"Ronde Tester\",\"whatsapp\":\"0813${SUF}7\",\"rombel\":\"5A\"}" >/dev/null
+code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_D\",\"rombel\":\"5A\"}" >/dev/null
 RID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
 g() { code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$RID,\"attempt_number\":$4,\"is_successful\":$3,\"points\":$2,\"zone_name\":\"$1\",\"game_mode\":\"manual\"}"; }
 check "att1 jackpot h01 (100)" 201 "$(g h01 100 true 1)"

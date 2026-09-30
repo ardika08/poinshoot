@@ -238,11 +238,10 @@ const AdminDashboardPage = () => {
 
   const handleExport = () => {
     const rows = [
-      ['Nama', 'Rombel', 'WhatsApp', 'Manual', 'Simulasi', 'Skor Final', 'Status'],
+      ['Nama', 'Rombel', 'Manual', 'Simulasi', 'Skor Final', 'Status'],
       ...filteredPlayers.map(p => [
         p.name,
         p.rombel,
-        p.whatsapp,
         p.manual_score,
         p.simulation_score,
         p.final_score,
@@ -265,7 +264,7 @@ const AdminDashboardPage = () => {
   ])].sort()
   const filteredPlayers = players.filter(p =>
     (!selectedRombel || p.rombel === selectedRombel) &&
-    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.whatsapp.includes(searchQuery))
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   if (!isAuthenticated) {
@@ -406,7 +405,7 @@ const AdminDashboardPage = () => {
                   >
                     <option value="">-- Pilih Pemain --</option>
                     {filteredPlayers.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} · {p.rombel} ({p.whatsapp})</option>
+                      <option key={p.id} value={p.id}>{p.name} · {p.rombel}</option>
                     ))}
                   </select>
                   {playerPagination?.total > players.length && (
@@ -637,7 +636,7 @@ const AdminDashboardPage = () => {
               <div key={player.id} className="bg-white rounded-xl shadow-sm p-3 border border-gray-100 flex items-center justify-between">
                 <div className="min-w-0 flex-grow">
                   <h3 className="font-semibold text-sm text-gray-900 truncate">{player.name}</h3>
-                  <p className="text-xs text-gray-400">{player.rombel} · {player.whatsapp}</p>
+                  <p className="text-xs text-gray-400">{player.rombel}</p>
                   <div className="flex items-center space-x-2 mt-0.5">
                     <span className="text-xs text-gray-500">Manual {player.manual_score}</span>
                     <span className="text-xs text-gray-500">Sim {player.simulation_score}</span>

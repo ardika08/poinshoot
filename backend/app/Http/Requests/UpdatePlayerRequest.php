@@ -2,10 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Player;
+use Closure;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Validation\Rule;
 
 class UpdatePlayerRequest extends FormRequest
 {
@@ -16,18 +17,20 @@ class UpdatePlayerRequest extends FormRequest
 
     public function rules(): array
     {
-        $playerId = $this->route('id');
-
         return [
-            'name' => ['sometimes', 'required', 'string', 'min:3', 'max:100'],
-            'rombel' => ['sometimes', 'required', 'string', 'regex:/^[1-6][A-Z]$/', 'max:10'],
-            'whatsapp' => [
+            'name' => [
                 'sometimes',
                 'required',
                 'string',
-                'regex:/^08[0-9]{8,11}$/',
-                Rule::unique('players', 'whatsapp')->ignore($playerId),
+                'min:3',
+                'max:100',
+                function (string $attribute, mixed $value, Closure $fail) {
+                    if ($this->duplicateExists(trim((string) $value), (string) $this->input('rombel', ''))) {
+                        $fail('Nama ini sudah terdaftar di rombel tersebut');
+                    }
+                },
             ],
+            'rombel' => ['sometimes', 'required', 'string', 'regex:/^[1-6][A-Z]$/', 'max:10'],
         ];
     }
 
@@ -36,20 +39,12 @@ class UpdatePlayerRequest extends FormRequest
         return [
             'name.min' => 'Nama minimal 3 karakter',
             'name.max' => 'Nama maksimal 100 karakter',
-            'whatsapp.regex' => 'Format nomor WhatsApp tidak valid (contoh: 081234567890)',
-            'whatsapp.unique' => 'Nomor WhatsApp sudah digunakan pemain lain',
             'rombel.regex' => 'Format rombel harus seperti 4A atau 4B',
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('whatsapp')) {
-            $wa = preg_replace('/[^0-9+]/', '', (string) $this->whatsapp);
-            $wa = preg_replace('/^\+?62/', '0', $wa);
-            $this->merge(['whatsapp' => $wa]);
-        }
-
         if ($this->has('name')) {
             $this->merge(['name' => trim((string) $this->name)]);
         }
@@ -59,12 +54,35 @@ class UpdatePlayerRequest extends FormRequest
         }
     }
 
+    /**
+     * Cek nama+rombel bentrok dengan pemain LAIN (abaikan pemain yang sedang diedit).
+     */
+    private function duplicateExists(string $name, string $rombel): bool
+    {
+        $playerId = $this->route('id');
+
+        if ($name === '') {
+            return false;
+        }
+
+        $query = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)]);
+
+        if ($rombel !== '') {
+            $query->where('rombel', strtoupper(trim($rombel)));
+        }
+
+        if ($playerId) {
+            $query->where('id', '!=', $playerId);
+        }
+
+        return $query->exists();
+    }
+
     protected function failedValidation(Validator $validator): void
     {
         $errors = $validator->errors();
-        $code = $errors->has('whatsapp') && str_contains($errors->first('whatsapp'), 'sudah digunakan')
-            ? 'DUPLICATE_WHATSAPP'
-            : 'VALIDATION_ERROR';
+        $isDuplicate = $errors->has('name') && str_contains((string) $errors->first('name'), 'sudah terdaftar');
+        $code = $isDuplicate ? 'DUPLICATE_PLAYER' : 'VALIDATION_ERROR';
 
         throw new HttpResponseException(response()->json([
             'success' => false,
@@ -73,6 +91,6 @@ class UpdatePlayerRequest extends FormRequest
                 'message' => $errors->first(),
                 'errors' => $errors->toArray(),
             ],
-        ], $code === 'DUPLICATE_WHATSAPP' ? 409 : 422));
+        ], $isDuplicate ? 409 : 422));
     }
 }

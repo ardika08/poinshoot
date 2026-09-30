@@ -9,7 +9,6 @@ class Player extends Model
 {
     protected $fillable = [
         'name',
-        'whatsapp',
         'rombel',
         'is_active',
     ];
