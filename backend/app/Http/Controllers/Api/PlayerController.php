@@ -117,6 +117,44 @@ class PlayerController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/v1/players/roster?rombel=4A
+     *
+     * Daftar nama siswa pada satu rombel (public, tanpa login). Dipakai di
+     * lapangan: siswa tinggal memilih namanya dari daftar, tidak perlu mengetik,
+     * sehingga tidak ada akun ganda karena salah ejaan.
+     *
+     * Hanya mengembalikan nama + status sudah main; tanpa id dan tanpa skor.
+     */
+    public function roster(Request $request)
+    {
+        $rombel = strtoupper(trim((string) $request->query('rombel', '')));
+
+        if (! preg_match('/^[1-6][A-Z]$/', $rombel)) {
+            return response()->json([
+                'success' => false,
+                'error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Parameter rombel wajib diisi, contoh 4A'],
+            ], 422);
+        }
+
+        $players = Player::where('rombel', $rombel)
+            ->with(['rounds' => fn ($q) => $q->where('game_mode', 'simulation')->select('id', 'player_id', 'game_mode')])
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'rombel' => $rombel,
+                'total' => $players->count(),
+                'players' => $players->map(fn ($p) => [
+                    'name' => $p->name,
+                    'simulation_done' => $p->rounds->isNotEmpty(),
+                ])->values(),
+            ],
+        ]);
+    }
+
     private function transform(Player $player): array
     {
         return [

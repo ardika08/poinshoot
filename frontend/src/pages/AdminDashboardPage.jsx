@@ -8,6 +8,7 @@ import {
 import api, { adminToken } from '../lib/api'
 import useBoardConfig from '../hooks/useBoardConfig'
 import BoardPicker from '../components/BoardPicker'
+import AddStudentsPanel from '../components/AddStudentsPanel'
 
 const AdminDashboardPage = () => {
   const navigate = useNavigate()
@@ -603,6 +604,16 @@ const AdminDashboardPage = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-5 sm:mb-6"
         >
+          {/* Siapkan daftar siswa: supaya guru bisa input skor manual lebih dulu
+              dan siswa di lapangan tinggal memilih namanya. */}
+          <AddStudentsPanel
+            onAdded={(data) => {
+              setSearchQuery('')
+              setSelectedRombel(data.rombel)
+              loadData(undefined, data.rombel)
+            }}
+          />
+
           <div className="flex items-center justify-between mb-3">
             <div className="flex flex-grow gap-2 mr-2">
               <select value={selectedRombel} onChange={(e) => setSelectedRombel(e.target.value)} className="px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white">

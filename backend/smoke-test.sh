@@ -63,6 +63,25 @@ check "GET admin/logs"          200 "$(code $BASE/admin/logs -H "$AUTH")"
 check "GET admin/games/recent"  200 "$(code $BASE/admin/games/recent -H "$AUTH")"
 check "GET admin/games/player/1" 200 "$(code $BASE/admin/games/player/1 -H "$AUTH")"
 
+echo "=== ADMIN TAMBAH SISWA + ROSTER (lapangan A → B) ==="
+ADD_NAME="Siswa Baru $SUF"
+check "GET players/roster (tanpa rombel)"   422 "$(code $BASE/players/roster)"
+check "GET players/roster (rombel invalid)" 422 "$(code "$BASE/players/roster?rombel=9Z")"
+check "POST admin/players (tanpa token)"    401 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -d "{\"rombel\":\"5C\",\"names\":[\"$ADD_NAME\"]}")"
+check "POST admin/players (rombel invalid)" 422 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"9Z\",\"names\":[\"$ADD_NAME\"]}")"
+check "POST admin/players (names kosong)"   422 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d '{"rombel":"5C","names":[]}')"
+check "POST admin/players (1 nama, string)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5C\",\"names\":\"$ADD_NAME\"}")"
+check "  -> added"                          1 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+check "POST admin/players (ulang = duplikat)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5C\",\"names\":\"$ADD_NAME\"}")"
+check "  -> duplicate (tidak bikin akun baru)" 1 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['duplicate'])")"
+check "POST admin/players (rombel huruf kecil)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5c\",\"names\":[\"$ADD_NAME 2\",\"Ab\"]}")"
+check "  -> rombel dinormalkan + nama pendek dilewati" "5C:1:1" "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(f\"{d['rombel']}:{d['added']}:{d['invalid']}\")")"
+check "GET players/roster 5C"               200 "$(code "$BASE/players/roster?rombel=5C")"
+check "  -> nama baru muncul di roster"     yes "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print('yes' if any(p['name']=='$ADD_NAME' for p in d['players']) else 'no')")"
+# Siswa buatan admin harus bisa langsung dipakai: input skor manual tanpa registrasi app dulu.
+ADD_ID=$(curl -s -G "$BASE/players/lookup" --data-urlencode "name=$ADD_NAME" --data-urlencode "rombel=5C" | python3 -c "import json;print(json.load(open('/dev/stdin'))['data']['player']['id'])")
+check "POST admin/games utk siswa buatan admin" 201 "$(code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$ADD_ID,\"attempt_number\":1,\"is_successful\":true,\"points\":50,\"zone_name\":\"h09\",\"game_mode\":\"manual\"}")"
+
 echo "=== MANUAL SCORE INPUT (5 attempts) ==="
 for i in 1 2 3 4 5; do
   check "POST admin/games attempt $i" 201 "$(code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$NEW_ID,\"attempt_number\":$i,\"is_successful\":true,\"points\":30,\"zone_name\":\"h13\",\"game_mode\":\"manual\"}")"

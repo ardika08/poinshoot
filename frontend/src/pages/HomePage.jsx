@@ -18,6 +18,8 @@ const HomePage = () => {
   const [success, setSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [stats, setStats] = useState(null)
+  const [roster, setRoster] = useState([])
+  const [isLoadingRoster, setIsLoadingRoster] = useState(false)
 
   // Ambil statistik publik
   useEffect(() => {
@@ -29,6 +31,31 @@ const HomePage = () => {
       })
     return () => controller.abort()
   }, [])
+
+  // Setelah rombel dipilih, tampilkan daftar nama siswa rombel itu.
+  // Siswa tinggal memilih namanya → tidak perlu mengetik → tidak ada akun ganda
+  // karena salah ejaan, dan skor manual dari lapangan A pasti tersambung.
+  useEffect(() => {
+    if (!/^[1-6][A-Z]$/.test(formData.rombel)) {
+      setRoster([])
+      setIsLoadingRoster(false)
+      return undefined
+    }
+
+    const controller = new AbortController()
+    setIsLoadingRoster(true)
+
+    api.getRoster(formData.rombel, controller.signal)
+      .then((data) => setRoster(data.players || []))
+      .catch((err) => {
+        if (err.name !== 'AbortError') setRoster([])
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingRoster(false)
+      })
+
+    return () => controller.abort()
+  }, [formData.rombel])
 
   const validateForm = () => {
     if (!formData.name || formData.name.trim().length < 3) {
@@ -209,6 +236,62 @@ const HomePage = () => {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3.5">
                 <div>
+                  <label htmlFor="rombel" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">Rombel</label>
+                  <select id="rombel" name="rombel" value={formData.rombel} onChange={handleChange} className="input-field bg-white">
+                    <option value="">-- Pilih Rombel --</option>
+                    {[1,2,3,4,5,6].flatMap(k => ['A','B'].map(r => `${k}${r}`)).map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+
+                {/* Daftar nama dari admin — siswa tinggal memilih, tidak mengetik */}
+                {/^[1-6][A-Z]$/.test(formData.rombel) && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs sm:text-sm font-medium text-gray-700">Pilih Namamu</label>
+                      {isLoadingRoster && <span className="text-xs text-gray-400">memuat…</span>}
+                    </div>
+
+                    {roster.length > 0 ? (
+                      <div className="max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
+                        {roster.map((p) => {
+                          const isPicked = formData.name === p.name
+                          return (
+                            <button
+                              type="button"
+                              key={p.name}
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, name: p.name }))
+                                setError('')
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm transition-colors ${
+                                isPicked
+                                  ? 'bg-primary-50 text-primary-700 font-semibold'
+                                  : 'hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <span className="truncate">{p.name}</span>
+                              {p.simulation_done ? (
+                                <span className="shrink-0 ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                  sudah main
+                                </span>
+                              ) : (
+                                isPicked && <CheckCircle2 className="w-4 h-4 shrink-0 ml-2" />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      !isLoadingRoster && (
+                        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                          Belum ada daftar nama untuk rombel ini. Ketik namamu di kolom bawah.
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
+
+                <div>
                   <label htmlFor="name" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">
                     Nama Lengkap
                   </label>
@@ -218,18 +301,15 @@ const HomePage = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
-                    placeholder="Masukkan nama lengkap"
+                    placeholder={roster.length > 0 ? 'Atau ketik nama lengkapmu' : 'Masukkan nama lengkap'}
                     className="input-field"
                     maxLength={100}
                   />
-                </div>
-
-                <div>
-                  <label htmlFor="rombel" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">Rombel</label>
-                  <select id="rombel" name="rombel" value={formData.rombel} onChange={handleChange} className="input-field bg-white">
-                    <option value="">-- Pilih Rombel --</option>
-                    {[1,2,3,4,5,6].flatMap(k => ['A','B'].map(r => `${k}${r}`)).map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  {roster.length > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Ketik hanya jika namamu belum ada di daftar atas — ejaannya harus sama dengan daftar admin.
+                    </p>
+                  )}
                 </div>
 
                 {error && (

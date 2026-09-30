@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminLoginRequest;
+use App\Http\Requests\AdminStorePlayersRequest;
 use App\Models\Admin;
 use App\Models\AdminLog;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Round;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class AdminController extends Controller
@@ -148,6 +150,92 @@ class AdminController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * POST /api/v1/admin/players — tambah siswa dari dashboard (admin).
+     *
+     * Dipakai untuk menyiapkan daftar nama+rombel sebelum acara, supaya:
+     * - guru bisa input skor manual di lapangan A walau siswa belum pernah
+     *   membuka app (akun sudah ada),
+     * - siswa di lapangan B tinggal memilih namanya dari daftar.
+     *
+     * Idempotent: nama+rombel yang sudah ada tidak dibuat ulang, hanya
+     * dilaporkan sebagai duplikat. Nama < 3 karakter dilaporkan sebagai invalid.
+     */
+    public function storePlayers(AdminStorePlayersRequest $request)
+    {
+        $rombel = $request->validated('rombel');
+        $names = $request->validated('names');
+
+        $added = [];
+        $duplicates = [];
+        $invalid = [];
+        $seen = [];
+
+        DB::transaction(function () use ($names, $rombel, &$added, &$duplicates, &$invalid, &$seen) {
+            foreach ($names as $name) {
+                $name = trim((string) $name);
+                $key = mb_strtolower($name);
+
+                if (mb_strlen($name) < 3) {
+                    $invalid[] = $name;
+                    continue;
+                }
+
+                // Nama sama dua kali di dalam satu tempelan
+                if (isset($seen[$key])) {
+                    $duplicates[] = $name;
+                    continue;
+                }
+
+                $seen[$key] = true;
+
+                $exists = Player::whereRaw('LOWER(name) = ?', [$key])
+                    ->where('rombel', $rombel)
+                    ->exists();
+
+                if ($exists) {
+                    $duplicates[] = $name;
+                    continue;
+                }
+
+                Player::create([
+                    'name' => $name,
+                    'rombel' => $rombel,
+                    'is_active' => true,
+                ]);
+
+                $added[] = $name;
+            }
+        });
+
+        $totalInRombel = Player::where('rombel', $rombel)->count();
+
+        /** @var Admin $admin */
+        $admin = $request->attributes->get('current_admin');
+
+        AdminLog::log($admin, 'add_players', null, [
+            'rombel' => $rombel,
+            'added' => count($added),
+            'duplicate' => count($duplicates),
+            'invalid' => count($invalid),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'rombel' => $rombel,
+                'added' => count($added),
+                'duplicate' => count($duplicates),
+                'invalid' => count($invalid),
+                'added_names' => $added,
+                'duplicate_names' => $duplicates,
+                'invalid_names' => $invalid,
+                'total_in_rombel' => $totalInRombel,
+            ],
+            'message' => count($added).' siswa ditambahkan ke rombel '.$rombel,
+        ], 201);
     }
 
     /**

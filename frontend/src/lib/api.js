@@ -87,11 +87,19 @@ async function request(path, { method = 'GET', body, auth = false, signal } = {}
     // Token expired/invalid → bersihkan sesi
     if (res.status === 401 && auth) adminToken.clear()
 
-    throw new ApiError(err.message || `Request gagal (${res.status})`, {
-      code: err.code,
-      status: res.status,
-      errors: err.errors,
-    })
+    // Error validasi Laravel memakai bentuk { message, errors } tanpa `error.message`,
+    // jadi ambil pesan pertama dari `errors` supaya pengguna tahu apa yang salah.
+    const firstFieldError = payload?.errors ? Object.values(payload.errors)[0] : null
+    const validationMessage = Array.isArray(firstFieldError) ? firstFieldError[0] : firstFieldError
+
+    throw new ApiError(
+      err.message || validationMessage || payload?.message || `Request gagal (${res.status})`,
+      {
+        code: err.code,
+        status: res.status,
+        errors: err.errors || payload?.errors,
+      }
+    )
   }
 
   return payload?.data ?? payload
@@ -107,6 +115,13 @@ export const api = {
   /** Cek apakah siswa (nama + rombel) sudah terdaftar */
   lookupPlayer: (name, rombel) =>
     request(`/players/lookup?name=${encodeURIComponent(name)}&rombel=${encodeURIComponent(rombel)}`),
+
+  /**
+   * Daftar nama siswa pada satu rombel — dipakai di lapangan supaya siswa
+   * tinggal memilih namanya (tidak mengetik, tidak ada akun ganda).
+   */
+  getRoster: (rombel, signal) =>
+    request(`/players/roster?rombel=${encodeURIComponent(rombel)}`, { signal }),
 
   /** Detail pemain + riwayat ronde */
   getPlayer: (id) => request(`/players/${id}`),
@@ -149,6 +164,14 @@ export const api = {
     params.set('page', String(page))
     return request(`/admin/players?${params}`, { auth: true, signal })
   },
+
+  /**
+   * Tambah siswa dari dashboard (satu atau banyak sekaligus).
+   * `names` boleh array nama atau teks satu-nama-per-baris.
+   * Idempotent: nama+rombel yang sudah ada hanya dilaporkan sebagai duplikat.
+   */
+  adminAddPlayers: (rombel, names) =>
+    request('/admin/players', { method: 'POST', auth: true, body: { rombel, names } }),
 
   adminLogs: ({ perPage = 30 } = {}, signal) =>
     request(`/admin/logs?per_page=${perPage}`, { auth: true, signal }),

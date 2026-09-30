@@ -18,6 +18,8 @@ Route::prefix('v1')->group(function () {
     // ---------- PUBLIC ----------
     Route::post('/players', [PlayerController::class, 'store']);
     Route::get('/players/lookup', [PlayerController::class, 'lookup']);
+    // Daftar nama per rombel — dipakai lapangan B: siswa pilih nama, tidak mengetik
+    Route::get('/players/roster', [PlayerController::class, 'roster']);
     Route::get('/players/{id}', [PlayerController::class, 'show'])->whereNumber('id');
     Route::put('/players/{id}', [PlayerController::class, 'update'])->whereNumber('id');
 
@@ -41,6 +43,8 @@ Route::prefix('v1')->group(function () {
 
             Route::get('/stats', [AdminController::class, 'stats']);
             Route::get('/players', [AdminController::class, 'players']);
+            // Tambah siswa manual (satu atau banyak sekaligus) sebelum acara
+            Route::post('/players', [AdminController::class, 'storePlayers']);
             Route::get('/logs', [AdminController::class, 'logs']);
 
             // Mode 1: input skor manual
