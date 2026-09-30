@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Trophy, Crown, Medal, User, Calendar, TrendingUp, Lock, AlertCircle } from 'lucide-react'
-import api from '../lib/api'
+import { Trophy, Crown, Medal, User, Calendar, TrendingUp, Lock, AlertCircle, UserPlus } from 'lucide-react'
+import api, { playerStorage } from '../lib/api'
 
 const LeaderboardPage = () => {
   const [scope, setScope] = useState('all_time')
   const [leaderboard, setLeaderboard] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
+
+  // 1 tap dari leaderboard: siswa selesai bermain, bersihkan sesinya lalu kembali
+  // ke form pendaftaran untuk siswa berikutnya. Skor sudah tersimpan di server,
+  // jadi tidak perlu konfirmasi seperti di halaman main.
+  const handleSwitchPlayer = () => {
+    playerStorage.clear()
+    navigate('/')
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,6 +80,17 @@ const LeaderboardPage = () => {
             <p className="text-xs text-gray-500 hidden sm:block">Skor final manual + simulasi</p>
           </div>
         </motion.div>
+
+        {/* 1 tap untuk siswa berikutnya — ditaruh di atas supaya langsung terlihat
+            tanpa perlu scroll setelah siswa selesai bermain. */}
+        <button
+          type="button"
+          onClick={handleSwitchPlayer}
+          className="btn-primary w-full max-w-xs mx-auto flex items-center justify-center space-x-2 mb-4"
+        >
+          <UserPlus className="w-5 h-5" />
+          <span>Ganti Pemain</span>
+        </button>
 
         {/* Tab Navigation - Scrollable on mobile */}
         <div className="flex justify-center gap-2">
@@ -206,6 +227,19 @@ const LeaderboardPage = () => {
         </div>
         )}
       </section>
+
+      {/* Tombol yang sama diulang di bawah daftar: siswa sering discroll sampai
+          bawah untuk melihat peringkatnya, jadi tombolnya jangan hanya di atas. */}
+      {!isLoading && leaderboard.length > 0 && (
+        <button
+          type="button"
+          onClick={handleSwitchPlayer}
+          className="btn-secondary w-full flex items-center justify-center space-x-2 mt-4"
+        >
+          <UserPlus className="w-4 h-4" />
+          <span>Ganti Pemain — siswa berikutnya</span>
+        </button>
+      )}
 
       {/* Privacy Info */}
       <div className="mt-6 sm:mt-8 bg-blue-50 rounded-xl p-4 border border-blue-100">
