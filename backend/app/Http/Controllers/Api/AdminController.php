@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AdminImportPlayersRequest;
 use App\Http\Requests\AdminLoginRequest;
 use App\Http\Requests\AdminStorePlayersRequest;
 use App\Models\Admin;
@@ -10,9 +11,11 @@ use App\Models\AdminLog;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Round;
+use App\Services\StudentListParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 class AdminController extends Controller
 {
@@ -168,47 +171,12 @@ class AdminController extends Controller
         $rombel = $request->validated('rombel');
         $names = $request->validated('names');
 
-        $added = [];
-        $duplicates = [];
-        $invalid = [];
-        $seen = [];
+        $pairs = array_map(
+            fn ($name) => ['name' => (string) $name, 'rombel' => $rombel],
+            $names
+        );
 
-        DB::transaction(function () use ($names, $rombel, &$added, &$duplicates, &$invalid, &$seen) {
-            foreach ($names as $name) {
-                $name = trim((string) $name);
-                $key = mb_strtolower($name);
-
-                if (mb_strlen($name) < 3) {
-                    $invalid[] = $name;
-                    continue;
-                }
-
-                // Nama sama dua kali di dalam satu tempelan
-                if (isset($seen[$key])) {
-                    $duplicates[] = $name;
-                    continue;
-                }
-
-                $seen[$key] = true;
-
-                $exists = Player::whereRaw('LOWER(name) = ?', [$key])
-                    ->where('rombel', $rombel)
-                    ->exists();
-
-                if ($exists) {
-                    $duplicates[] = $name;
-                    continue;
-                }
-
-                Player::create([
-                    'name' => $name,
-                    'rombel' => $rombel,
-                    'is_active' => true,
-                ]);
-
-                $added[] = $name;
-            }
-        });
+        $result = $this->persistStudentRecords($pairs);
 
         $totalInRombel = Player::where('rombel', $rombel)->count();
 
@@ -217,25 +185,190 @@ class AdminController extends Controller
 
         AdminLog::log($admin, 'add_players', null, [
             'rombel' => $rombel,
-            'added' => count($added),
-            'duplicate' => count($duplicates),
-            'invalid' => count($invalid),
+            'added' => count($result['added']),
+            'duplicate' => count($result['duplicate']),
+            'invalid' => count($result['invalid']),
         ]);
 
         return response()->json([
             'success' => true,
             'data' => [
                 'rombel' => $rombel,
-                'added' => count($added),
-                'duplicate' => count($duplicates),
-                'invalid' => count($invalid),
-                'added_names' => $added,
-                'duplicate_names' => $duplicates,
-                'invalid_names' => $invalid,
+                'added' => count($result['added']),
+                'duplicate' => count($result['duplicate']),
+                'invalid' => count($result['invalid']),
+                'added_names' => $result['added'],
+                'duplicate_names' => $result['duplicate'],
+                'invalid_names' => $result['invalid'],
                 'total_in_rombel' => $totalInRombel,
             ],
-            'message' => count($added).' siswa ditambahkan ke rombel '.$rombel,
+            'message' => count($result['added']).' siswa ditambahkan ke rombel '.$rombel,
         ], 201);
+    }
+
+    /**
+     * POST /api/v1/admin/players/import — tambah banyak siswa sekaligus.
+     *
+     * Menerima tempelan dari Excel / Google Sheets ATAU unggahan berkas
+     * (.xlsx / .csv / .txt). Rombel boleh ikut di dalam data — satu file bisa
+     * memuat beberapa rombel sekaligus — atau diambil dari `rombel` sebagai
+     * nilai bawaan untuk baris yang tidak menyebut rombelnya.
+     *
+     * Idempotent seperti storePlayers: nama+rombel yang sudah ada dilaporkan
+     * sebagai duplikat, bukan error.
+     */
+    public function importPlayers(AdminImportPlayersRequest $request)
+    {
+        $parser = app(StudentListParser::class);
+        $dryRun = $request->boolean('dry_run');
+        $hasFile = $request->hasFile('file');
+
+        try {
+            $rows = $hasFile
+                ? $parser->rowsFromFile($request->file('file'))
+                : $parser->rowsFromText((string) $request->input('text', ''));
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => [
+                    'code' => 'IMPORT_UNREADABLE',
+                    'message' => $e->getMessage(),
+                ],
+            ], 422);
+        }
+
+        $parsed = $parser->normalize($rows, $request->input('rombel'));
+
+        if ($parsed['records'] === [] && $parsed['invalid'] === []) {
+            return response()->json([
+                'success' => false,
+                'error' => [
+                    'code' => 'IMPORT_EMPTY',
+                    'message' => 'Tidak ada nama siswa yang terbaca. Pastikan ada kolom nama, '
+                        .'dan kolom rombel — atau pilih rombel dulu di atas.',
+                ],
+            ], 422);
+        }
+
+        $result = $this->persistStudentRecords($parsed['records'], $dryRun);
+
+        // Siswa yang namanya terbaca tapi rombelnya tidak diketahui
+        $invalidNames = array_merge($result['invalid'], array_column($parsed['invalid'], 'name'));
+
+        // Jumlah per rombel: berguna untuk memastikan operator menempel ke
+        // rombel yang benar sebelum menyimpan.
+        $byRombel = [];
+
+        foreach ($parsed['records'] as $record) {
+            $byRombel[$record['rombel']] = ($byRombel[$record['rombel']] ?? 0) + 1;
+        }
+
+        ksort($byRombel);
+
+        if (! $dryRun) {
+            /** @var Admin $admin */
+            $admin = $request->attributes->get('current_admin');
+
+            AdminLog::log($admin, 'import_players', null, [
+                'source' => $hasFile ? 'file' : 'paste',
+                'filename' => $hasFile ? $request->file('file')->getClientOriginalName() : null,
+                'added' => count($result['added']),
+                'duplicate' => count($result['duplicate']),
+                'invalid' => count($invalidNames),
+                'by_rombel' => $byRombel,
+            ]);
+        }
+
+        $addedCount = count($result['added']);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'dry_run' => $dryRun,
+                'added' => $addedCount,
+                'duplicate' => count($result['duplicate']),
+                'invalid' => count($invalidNames),
+                'by_rombel' => $byRombel,
+                'added_names' => $result['added'],
+                'duplicate_names' => $result['duplicate'],
+                // Dibatasi supaya respons tidak membengkak untuk daftar panjang
+                'invalid_names' => array_slice($invalidNames, 0, 20),
+                'total_rows' => count($parsed['records']),
+            ],
+            'message' => $dryRun
+                ? $addedCount.' siswa siap ditambahkan — belum disimpan'
+                : $addedCount.' siswa ditambahkan',
+        ], $dryRun ? 200 : 201);
+    }
+
+    /**
+     * Simpan pasangan nama+rombel ke tabel players.
+     *
+     * Dipakai bersama oleh storePlayers (satu rombel) dan importPlayers
+     * (banyak rombel) supaya aturannya persis sama:
+     * - nama < 3 karakter dilaporkan invalid,
+     * - nama+rombel yang sudah ada (atau kembar di dalam satu kiriman)
+     *   dilaporkan sebagai duplikat, bukan error,
+     * - `$dryRun` melakukan semua pemeriksaan tanpa menulis apa pun, supaya
+     *   operator bisa melihat hasilnya dulu sebelum menyimpan.
+     *
+     * @param  array<int, array{name: string, rombel: string}>  $pairs
+     * @return array{added: array<int, string>, duplicate: array<int, string>, invalid: array<int, string>}
+     */
+    private function persistStudentRecords(array $pairs, bool $dryRun = false): array
+    {
+        $added = [];
+        $duplicates = [];
+        $invalid = [];
+        $seen = [];
+
+        $process = function () use ($pairs, $dryRun, &$added, &$duplicates, &$invalid, &$seen) {
+            foreach ($pairs as $pair) {
+                $name = trim((string) ($pair['name'] ?? ''));
+                $rombel = trim((string) ($pair['rombel'] ?? ''));
+                $key = $rombel.'|'.mb_strtolower($name);
+
+                if (mb_strlen($name) < 3) {
+                    $invalid[] = $name;
+
+                    continue;
+                }
+
+                // Nama sama dua kali di dalam satu kiriman
+                if (isset($seen[$key])) {
+                    $duplicates[] = $name;
+
+                    continue;
+                }
+
+                $seen[$key] = true;
+
+                $exists = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                    ->where('rombel', $rombel)
+                    ->exists();
+
+                if ($exists) {
+                    $duplicates[] = $name;
+
+                    continue;
+                }
+
+                if (! $dryRun) {
+                    Player::create([
+                        'name' => $name,
+                        'rombel' => $rombel,
+                        'is_active' => true,
+                    ]);
+                }
+
+                $added[] = $name;
+            }
+        };
+
+        // Pemeriksaan (dry run) tidak menulis apa pun, jadi tidak perlu transaksi
+        $dryRun ? $process() : DB::transaction($process);
+
+        return ['added' => $added, 'duplicate' => $duplicates, 'invalid' => $invalid];
     }
 
     /**

@@ -45,6 +45,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/players', [AdminController::class, 'players']);
             // Tambah siswa manual (satu atau banyak sekaligus) sebelum acara
             Route::post('/players', [AdminController::class, 'storePlayers']);
+            // Import massal: tempel dari Excel atau unggah .xlsx/.csv
+            Route::post('/players/import', [AdminController::class, 'importPlayers']);
             Route::get('/logs', [AdminController::class, 'logs']);
 
             // Mode 1: input skor manual

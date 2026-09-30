@@ -609,8 +609,11 @@ const AdminDashboardPage = () => {
           <AddStudentsPanel
             onAdded={(data) => {
               setSearchQuery('')
-              setSelectedRombel(data.rombel)
-              loadData(undefined, data.rombel)
+              // Import bisa memuat beberapa rombel sekaligus — filter ke rombel
+              // pertama yang benar-benar dapat siswa baru.
+              const rombelPertama = data.rombel || Object.keys(data.by_rombel || {})[0] || ''
+              setSelectedRombel(rombelPertama)
+              loadData(undefined, rombelPertama)
             }}
           />
 

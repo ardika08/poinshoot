@@ -45,7 +45,11 @@ export const playerStorage = {
 async function request(path, { method = 'GET', body, auth = false, signal } = {}) {
   const headers = { Accept: 'application/json' }
 
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  // FormData (unggahan file) tidak boleh diberi Content-Type manual — browser
+  // yang menuliskan boundary-nya sendiri.
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
+
+  if (body !== undefined && !isFormData) headers['Content-Type'] = 'application/json'
 
   if (auth) {
     const token = adminToken.get()
@@ -63,7 +67,7 @@ async function request(path, { method = 'GET', body, auth = false, signal } = {}
     res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
       signal,
     })
   } catch (err) {
@@ -172,6 +176,31 @@ export const api = {
    */
   adminAddPlayers: (rombel, names) =>
     request('/admin/players', { method: 'POST', auth: true, body: { rombel, names } }),
+
+  /**
+   * Import banyak siswa sekaligus: tempel dari Excel/Google Sheets ATAU unggah
+   * berkas .xlsx/.csv/.txt. Rombel boleh ikut di dalam data, jadi satu kiriman
+   * bisa mengisi beberapa rombel sekaligus.
+   *
+   * dryRun=true hanya MEMERIKSA (tidak menulis ke database) supaya operator
+   * bisa melihat hasilnya dulu sebelum menekan Simpan.
+   */
+  adminImportPlayers: ({ text = '', file = null, rombel = '', dryRun = false } = {}) => {
+    if (file) {
+      const form = new FormData()
+      form.append('file', file)
+      if (rombel) form.append('rombel', rombel)
+      form.append('dry_run', dryRun ? '1' : '0')
+
+      return request('/admin/players/import', { method: 'POST', auth: true, body: form })
+    }
+
+    return request('/admin/players/import', {
+      method: 'POST',
+      auth: true,
+      body: { text, rombel: rombel || undefined, dry_run: dryRun },
+    })
+  },
 
   adminLogs: ({ perPage = 30 } = {}, signal) =>
     request(`/admin/logs?per_page=${perPage}`, { auth: true, signal }),

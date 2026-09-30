@@ -67,20 +67,63 @@ echo "=== ADMIN TAMBAH SISWA + ROSTER (lapangan A → B) ==="
 ADD_NAME="Siswa Baru $SUF"
 check "GET players/roster (tanpa rombel)"   422 "$(code $BASE/players/roster)"
 check "GET players/roster (rombel invalid)" 422 "$(code "$BASE/players/roster?rombel=9Z")"
-check "POST admin/players (tanpa token)"    401 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -d "{\"rombel\":\"5C\",\"names\":[\"$ADD_NAME\"]}")"
+check "POST admin/players (tanpa token)"    401 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -d "{\"rombel\":\"5A\",\"names\":[\"$ADD_NAME\"]}")"
 check "POST admin/players (rombel invalid)" 422 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"9Z\",\"names\":[\"$ADD_NAME\"]}")"
-check "POST admin/players (names kosong)"   422 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d '{"rombel":"5C","names":[]}')"
-check "POST admin/players (1 nama, string)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5C\",\"names\":\"$ADD_NAME\"}")"
+check "POST admin/players (names kosong)"   422 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d '{"rombel":"5A","names":[]}')"
+check "POST admin/players (1 nama, string)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5A\",\"names\":\"$ADD_NAME\"}")"
 check "  -> added"                          1 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
-check "POST admin/players (ulang = duplikat)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5C\",\"names\":\"$ADD_NAME\"}")"
+check "POST admin/players (ulang = duplikat)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5A\",\"names\":\"$ADD_NAME\"}")"
 check "  -> duplicate (tidak bikin akun baru)" 1 "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['duplicate'])")"
-check "POST admin/players (rombel huruf kecil)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5c\",\"names\":[\"$ADD_NAME 2\",\"Ab\"]}")"
-check "  -> rombel dinormalkan + nama pendek dilewati" "5C:1:1" "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(f\"{d['rombel']}:{d['added']}:{d['invalid']}\")")"
-check "GET players/roster 5C"               200 "$(code "$BASE/players/roster?rombel=5C")"
+check "POST admin/players (rombel huruf kecil)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d "{\"rombel\":\"5a\",\"names\":[\"$ADD_NAME 2\",\"Ab\"]}")"
+check "  -> rombel dinormalkan + nama pendek dilewati" "5A:1:1" "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(f\"{d['rombel']}:{d['added']}:{d['invalid']}\")")"
+check "GET players/roster 5A"               200 "$(code "$BASE/players/roster?rombel=5A")"
 check "  -> nama baru muncul di roster"     yes "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print('yes' if any(p['name']=='$ADD_NAME' for p in d['players']) else 'no')")"
 # Siswa buatan admin harus bisa langsung dipakai: input skor manual tanpa registrasi app dulu.
-ADD_ID=$(curl -s -G "$BASE/players/lookup" --data-urlencode "name=$ADD_NAME" --data-urlencode "rombel=5C" | python3 -c "import json;print(json.load(open('/dev/stdin'))['data']['player']['id'])")
+ADD_ID=$(curl -s -G "$BASE/players/lookup" --data-urlencode "name=$ADD_NAME" --data-urlencode "rombel=5A" | python3 -c "import json;print(json.load(open('/dev/stdin'))['data']['player']['id'])")
 check "POST admin/games utk siswa buatan admin" 201 "$(code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$ADD_ID,\"attempt_number\":1,\"is_successful\":true,\"points\":50,\"zone_name\":\"h09\",\"game_mode\":\"manual\"}")"
+
+echo "=== IMPORT SISWA MASSAL (tempel dari Excel + unggah berkas) ==="
+IMP_A="Import Tempel $SUF"
+IMP_B="Import Tempel $SUF Dua"
+IMP_C="Import Xlsx $SUF"
+DIR_TES="$(cd "$(dirname "$0")" && pwd)"
+
+# Tempelan gaya Excel: ada baris judul, kolom nomor, pemisah TAB, dan kolom
+# rombel — bentuk yang paling sering bikin daftar gagal terbaca kalau parser naif.
+printf 'No\tNama Siswa\tRombel\n1\t%s\t5A\n2\t%s\t6B\n' "$IMP_A" "$IMP_B" > /tmp/import-paste.txt
+# Dua payload: satu untuk memeriksa (dry_run), satu untuk benar-benar menyimpan.
+PASTE=$(python3 -c "import json;print(json.dumps({'text':open('/tmp/import-paste.txt').read(),'dry_run':True}))")
+SIMPAN=$(python3 -c "import json;print(json.dumps({'text':open('/tmp/import-paste.txt').read(),'dry_run':False}))")
+
+check "POST import (periksa dulu)"  200 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d "$PASTE")"
+check "  -> 2 siswa terdeteksi"     2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+check "  -> rombel 5A & 6B terbaca" "5A,6B" "$(python3 -c "import json;print(','.join(json.load(open('/tmp/resp.json'))['data']['by_rombel']))")"
+check "  -> belum ditulis ke DB"    0   "$(curl -s "$BASE/players/roster?rombel=6B" | python3 -c "import json,sys;print(sum(1 for p in json.load(sys.stdin)['data']['players'] if p['name']=='$IMP_B'))")"
+
+check "POST import (simpan)"        201 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d "$SIMPAN")"
+check "  -> 2 siswa ditambahkan"    2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+check "POST import (daftar sama lagi)" 201 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d "$SIMPAN")"
+check "  -> jadi duplikat"          2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['duplicate'])")"
+check "  -> tidak bikin akun baru"  0   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+
+# Hanya kolom nama + rombel bawaan dari dropdown
+BARE=$(python3 -c "import json;print(json.dumps({'text':'$IMP_A Tiga\n$IMP_A Empat','rombel':'5A'}))")
+check "POST import (1 kolom + rombel bawaan)" 201 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d "$BARE")"
+check "  -> 2 siswa ditambahkan"    2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+
+check "POST import (tanpa isi)"     422 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d '{}')"
+check "POST import (tanpa token)"   401 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -d "$PASTE")"
+check "POST import (rombel invalid)" 422 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d '{"text":"Nama Panjang Sekali","rombel":"9Z"}')"
+
+# Berkas .xlsx asli (dibuat saat test) — parser membaca zip + XML tanpa library
+python3 "$DIR_TES/tests/make-xlsx.py" /tmp/import-uji.xlsx "$IMP_C:5A" > /dev/null
+check "POST import (unggah .xlsx)"  201 "$(code -X POST $BASE/admin/players/import -H "$AUTH" -F "file=@/tmp/import-uji.xlsx")"
+check "  -> 1 siswa ditambahkan"    1   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+
+# .xls lama tidak didukung: harus pesan jelas (422), bukan error 500
+echo "bukan excel" > /tmp/import-lama.xls
+check "POST import (.xls lama ditolak)" 422 "$(code -X POST $BASE/admin/players/import -H "$AUTH" -F "file=@/tmp/import-lama.xls")"
+check "  -> kode IMPORT_UNREADABLE" IMPORT_UNREADABLE "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['error']['code'])")"
 
 echo "=== MANUAL SCORE INPUT (5 attempts) ==="
 for i in 1 2 3 4 5; do
