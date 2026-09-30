@@ -133,8 +133,23 @@ export const api = {
   /** Edit data pemain */
   updatePlayer: (id, data) => request(`/players/${id}`, { method: 'PUT', body: data }),
 
-  /** Leaderboard: scope = all_time | weekly | monthly */
-  getLeaderboard: (scope = 'all_time', signal) => request(`/leaderboard/${scope}`, { signal }),
+  /**
+   * Leaderboard: scope = all_time | weekly | monthly.
+   *
+   * Opsi:
+   *  - rombel   : 1A-6B → batasi papan ke satu kelas
+   *  - playerId : sertakan "posisi kamu" walau di luar peringkat yang ditampilkan
+   *  - limit    : jumlah baris (default server: 10)
+   *  - signal   : AbortController
+   */
+  getLeaderboard: (scope = 'all_time', { rombel, playerId, limit, signal } = {}) => {
+    const params = new URLSearchParams()
+    if (rombel) params.set('rombel', rombel)
+    if (playerId) params.set('player_id', playerId)
+    if (limit) params.set('limit', limit)
+    const query = params.toString()
+    return request(`/leaderboard/${scope}${query ? `?${query}` : ''}`, { signal })
+  },
 
   /** Statistik publik untuk homepage */
   getPublicStats: (signal) => request('/stats', { signal }),

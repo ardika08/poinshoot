@@ -172,6 +172,17 @@ check "  ronde ditutup"        True "$(python3 -c "import json;print(json.load(o
 check "simulasi kedua ditolak" 409 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":false},{\"attempt_number\":2,\"is_successful\":false},{\"attempt_number\":3,\"is_successful\":false},{\"attempt_number\":4,\"is_successful\":false},{\"attempt_number\":5,\"is_successful\":false}]}")"
 check "simulasi lubang tak dikenal" 422 "$(code -X POST $BASE/simulation/rounds -H 'Content-Type: application/json' -d "{\"player_id\":$NEW_ID,\"attempts\":[{\"attempt_number\":1,\"is_successful\":true,\"points\":10,\"zone_name\":\"h99\"},{\"attempt_number\":2,\"is_successful\":false,\"points\":0},{\"attempt_number\":3,\"is_successful\":false,\"points\":0},{\"attempt_number\":4,\"is_successful\":false,\"points\":0},{\"attempt_number\":5,\"is_successful\":false,\"points\":0}]}")"
 
+echo "=== LEADERBOARD PER KELAS + POSISI KAMU ==="
+check "GET leaderboard?rombel=4A" 200 "$(code "$BASE/leaderboard/all_time?rombel=4A")"
+check "  data.rombel = 4A" 4A "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['rombel'])")"
+check "  semua baris kelas 4A" True "$(python3 -c "import json;print(all(p['rombel']=='4A' for p in json.load(open('/tmp/resp.json'))['data']['top_players']))")"
+check "GET leaderboard (rombel invalid)" 400 "$(code "$BASE/leaderboard/all_time?rombel=9Z")"
+check "GET leaderboard (limit=3)" 3 "$(code "$BASE/leaderboard/all_time?limit=3" >/dev/null; python3 -c "import json;print(len(json.load(open('/tmp/resp.json'))['data']['top_players']))")"
+check "GET leaderboard?player_id" 200 "$(code "$BASE/leaderboard/all_time?player_id=$NEW_ID")"
+check "  you.player_id cocok" "$NEW_ID" "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['you']['player_id'])")"
+check "  you.final_score > 0" True "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['you']['final_score']>0)")"
+check "  you tetap ada walau limit=1" True "$(code "$BASE/leaderboard/all_time?player_id=$NEW_ID&limit=1" >/dev/null; python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(d['you'] is not None and len(d['top_players'])==1)")"
+
 echo "=== LOGOUT ==="
 check "POST admin/logout"       200 "$(code -X POST $BASE/admin/logout -H "$AUTH")"
 check "GET admin/stats (revoked)" 401 "$(code $BASE/admin/stats -H "$AUTH")"

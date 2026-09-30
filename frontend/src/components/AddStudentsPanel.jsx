@@ -5,9 +5,7 @@ import {
   FileSpreadsheet, Upload, X, Loader2, Info,
 } from 'lucide-react'
 import api, { ApiError } from '../lib/api'
-
-// Saran rombel untuk kolom "rombel bawaan" (1A-6B).
-const ROMBELS = [1, 2, 3, 4, 5, 6].flatMap((k) => ['A', 'B'].map((r) => `${k}${r}`))
+import { ROMBELS } from '../lib/rombels'
 
 const CONTOH_TEMPEL = `Tempel di sini (Ctrl+V), contoh:
 
