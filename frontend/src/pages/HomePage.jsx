@@ -68,25 +68,10 @@ const HomePage = () => {
       setTimeout(() => navigate('/play'), 1200)
     } catch (err) {
       if (err instanceof ApiError && err.code === 'DUPLICATE_WHATSAPP') {
-        // Nomor sudah terdaftar → pakai data lama, langsung main
-        try {
-          const { player } = await api.lookupPlayer(formData.whatsapp)
-          if (player) {
-            playerStorage.set({
-              id: player.id,
-              name: player.name,
-              whatsapp: player.whatsapp,
-              rombel: player.rombel,
-              registeredAt: player.created_at,
-            })
-            setSuccess(true)
-            setTimeout(() => navigate('/play'), 1200)
-            return
-          }
-        } catch {
-          // fallthrough ke pesan error
-        }
-        setError('Nomor WhatsApp sudah terdaftar. Coba nomor lain.')
+        // Nomor sudah terdaftar. Untuk konteks sekolah, jangan diam-diam pakai
+        // akun lama — nama di layar game & admin bisa jadi orang yang berbeda.
+        // Tampilkan pesan jelas supaya operator pakai nomor lain.
+        setError('Nomor WhatsApp ini sudah terdaftar. Setiap siswa harus memakai nomor berbeda. Hubungi admin jika nomor ini milik siswa tersebut.')
       } else {
         setError(err.message || 'Gagal mendaftar. Coba lagi.')
       }
