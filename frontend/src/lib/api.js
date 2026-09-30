@@ -243,6 +243,11 @@ export const api = {
 
   adminDeleteRound: (roundId) =>
     request(`/admin/rounds/${roundId}`, { method: 'DELETE', auth: true }),
+
+  // Hapus pemain ikut menghapus ronde + game miliknya (backend pakai transaksi),
+  // jadi skornya benar-benar hilang — bukan jadi baris yatim di leaderboard.
+  adminDeletePlayer: (playerId) =>
+    request(`/admin/players/${playerId}`, { method: 'DELETE', auth: true }),
 }
 
 /**

@@ -23,6 +23,11 @@ const AdminDashboardPage = () => {
   const [selectedRombel, setSelectedRombel] = useState('')
   const [loadError, setLoadError] = useState('')
 
+  // --- Hapus siswa: satuan (tombol per baris) + massal (checkbox) ---
+  const [selectedIds, setSelectedIds] = useState([])
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState(null)
+
   // --- Manual score input state ---
   const [activeTab, setActiveTab] = useState('input')
   const [selectedPlayerId, setSelectedPlayerId] = useState('')
@@ -111,6 +116,9 @@ const AdminDashboardPage = () => {
 
   const handleRombelChange = (value) => {
     setSelectedRombel(value)
+    // Pilihan massal dikosongkan: daftar yang dimuat ikut berubah, jadi centang
+    // lama bisa menunjuk siswa yang tidak lagi tampil.
+    setSelectedIds([])
     startNewPlayer()
     loadData(undefined, value)
   }
@@ -237,6 +245,69 @@ const AdminDashboardPage = () => {
     }
   }
 
+  /**
+   * Hapus satu siswa beserta seluruh riwayat skornya.
+   * Konfirmasi menyebut nama, rombel, dan skor yang ikut hilang — penghapusan
+   * pemain permanen dan tidak ada undo di UI.
+   */
+  const handleDeletePlayer = async (player) => {
+    const punyaSkor = (player.manual_score || player.simulation_score) > 0
+    const pesan = `Hapus ${player.name} (${player.rombel})?\n\n` +
+      (punyaSkor
+        ? `Riwayat skornya ikut terhapus (manual ${player.manual_score}, simulasi ${player.simulation_score}).`
+        : 'Siswa ini belum punya skor.') +
+      '\n\nTidak bisa dibatalkan.'
+
+    if (!window.confirm(pesan)) return
+
+    try {
+      await api.adminDeletePlayer(player.id)
+      setSelectedIds((prev) => prev.filter((id) => String(id) !== String(player.id)))
+      if (String(selectedPlayerId) === String(player.id)) startNewPlayer()
+      loadData()
+    } catch (err) {
+      alert(err.message || 'Gagal menghapus siswa')
+    }
+  }
+
+  /**
+   * Hapus massal. Endpoint hapus memang per-id, jadi dikirim berurutan:
+   * supaya pesan gagal bisa menyebut nama spesifik dan satu siswa bermasalah
+   * tidak membatalkan sisanya.
+   */
+  const handleDeleteSelected = async () => {
+    const targets = players.filter((p) => isSelected(p.id))
+    if (targets.length === 0) return
+
+    const daftar = targets.map((p) => `• ${p.name} (${p.rombel})`).join('\n')
+    const pesan = `Hapus ${targets.length} siswa beserta SELURUH riwayat skornya?\n\n` +
+      `${daftar}\n\nTidak bisa dibatalkan.`
+    if (!window.confirm(pesan)) return
+
+    setIsDeleting(true)
+    setDeleteProgress({ done: 0, total: targets.length })
+
+    const gagal = []
+    for (let i = 0; i < targets.length; i += 1) {
+      try {
+        await api.adminDeletePlayer(targets[i].id)
+        if (String(selectedPlayerId) === String(targets[i].id)) startNewPlayer()
+      } catch (err) {
+        gagal.push(`${targets[i].name}: ${err.message || 'gagal'}`)
+      }
+      setDeleteProgress({ done: i + 1, total: targets.length })
+    }
+
+    setIsDeleting(false)
+    setDeleteProgress(null)
+    setSelectedIds([])
+    loadData()
+
+    if (gagal.length > 0) {
+      alert(`${gagal.length} siswa gagal dihapus:\n${gagal.join('\n')}`)
+    }
+  }
+
   const handleExport = () => {
     const rows = [
       ['Nama', 'Rombel', 'Manual', 'Simulasi', 'Skor Final', 'Status'],
@@ -267,6 +338,35 @@ const AdminDashboardPage = () => {
     (!selectedRombel || p.rombel === selectedRombel) &&
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // --- Seleksi hapus massal ---
+  // Selalu diturunkan dari `players` yang sedang dimuat, bukan dari selectedIds
+  // mentah: kalau tidak, tombol bisa menjanjikan 3 siswa tapi yang terhapus 1.
+  const isSelected = (id) => selectedIds.some((sid) => String(sid) === String(id))
+  const selectedPlayers = players.filter((p) => isSelected(p.id))
+  const allFilteredSelected =
+    filteredPlayers.length > 0 && filteredPlayers.every((p) => isSelected(p.id))
+  const someFilteredSelected = filteredPlayers.some((p) => isSelected(p.id))
+
+  const toggleOne = (id) => {
+    setSelectedIds((prev) =>
+      prev.some((sid) => String(sid) === String(id))
+        ? prev.filter((sid) => String(sid) !== String(id))
+        : [...prev, id]
+    )
+  }
+
+  // "Pilih semua" hanya menjangkau yang sedang tampil (ikut filter rombel + cari),
+  // jadi guru tidak menghapus rombel lain tanpa sadar.
+  const toggleAllFiltered = () => {
+    setSelectedIds((prev) => {
+      const ids = filteredPlayers.map((p) => p.id)
+      const semuaTerpilih = ids.length > 0 && ids.every((id) => isSelected(id))
+      return semuaTerpilih
+        ? prev.filter((sid) => !ids.some((id) => String(id) === String(sid)))
+        : [...new Set([...prev, ...ids])]
+    })
+  }
 
   if (!isAuthenticated) {
     return (
@@ -619,7 +719,10 @@ const AdminDashboardPage = () => {
 
           <div className="flex items-center justify-between mb-3">
             <div className="flex flex-grow gap-2 mr-2">
-              <select value={selectedRombel} onChange={(e) => setSelectedRombel(e.target.value)} className="px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+              {/* Lewat handleRombelChange supaya daftar dimuat ulang dari API dengan
+                  filter rombel ini — kalau hanya set state, list bisa masih berisi
+                  rombel sebelumnya (dari tab Input) dan "pilih semua" jadi menyesatkan. */}
+              <select value={selectedRombel} onChange={(e) => handleRombelChange(e.target.value)} className="px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white">
                 <option value="">Semua</option>
                 {rombelOptions.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
@@ -637,17 +740,89 @@ const AdminDashboardPage = () => {
             </button>
           </div>
 
+          {/* Baris seleksi massal — satu baris supaya tidak menambah panjang halaman */}
+          {filteredPlayers.length > 0 && (
+            <div
+              className={`mb-2 flex items-center justify-between gap-2 rounded-xl px-3 py-2 border transition-colors ${
+                selectedPlayers.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'
+              }`}
+            >
+              <label className="inline-flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none min-w-0">
+                <input
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someFilteredSelected && !allFilteredSelected
+                  }}
+                  onChange={toggleAllFiltered}
+                  className="w-4 h-4 accent-red-600 shrink-0"
+                  aria-label="Pilih semua siswa yang tampil"
+                />
+                <span className="truncate">Pilih semua ({filteredPlayers.length})</span>
+              </label>
+
+              {selectedPlayers.length > 0 ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs font-semibold text-red-700">
+                    {selectedPlayers.length} dipilih
+                  </span>
+                  <button
+                    onClick={() => setSelectedIds([])}
+                    disabled={isDeleting}
+                    className="text-xs text-gray-500 hover:text-gray-700 px-1.5 py-1 disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={isDeleting}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {isDeleting ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {isDeleting && deleteProgress
+                        ? `${deleteProgress.done}/${deleteProgress.total}`
+                        : 'Hapus'}
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs text-gray-400 shrink-0">Centang untuk hapus massal</span>
+              )}
+            </div>
+          )}
+
           {/* Players List — scroll internal supaya halaman tidak memanjang */}
           <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
             {players.length === 0 && (
               <div className="bg-white rounded-xl p-5 text-center border border-gray-100">
                 <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Belum ada pemain terdaftar</p>
+                <p className="text-sm text-gray-500">
+                  {selectedRombel
+                    ? `Belum ada siswa di rombel ${selectedRombel}. Tambahkan lewat panel di atas.`
+                    : 'Belum ada pemain terdaftar'}
+                </p>
               </div>
             )}
 
             {filteredPlayers.map((player) => (
-              <div key={player.id} className="bg-white rounded-xl shadow-sm p-3 border border-gray-100 flex items-center justify-between">
+              <div
+                key={player.id}
+                className={`rounded-xl shadow-sm p-3 border flex items-center gap-2.5 transition-colors ${
+                  isSelected(player.id) ? 'bg-red-50/60 border-red-200' : 'bg-white border-gray-100'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected(player.id)}
+                  onChange={() => toggleOne(player.id)}
+                  className="w-4 h-4 accent-red-600 shrink-0"
+                  aria-label={`Pilih ${player.name}`}
+                />
                 <div className="min-w-0 flex-grow">
                   <h3 className="font-semibold text-sm text-gray-900 truncate">{player.name}</h3>
                   <p className="text-xs text-gray-400">{player.rombel}</p>
@@ -657,13 +832,23 @@ const AdminDashboardPage = () => {
                     <span className="text-xs font-semibold text-primary-600">Final {player.final_score}</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setActiveTab('input'); handlePlayerChange(String(player.id)) }}
-                  className="shrink-0 ml-2 inline-flex items-center space-x-1 px-2.5 py-1.5 bg-primary-50 text-primary-600 rounded-lg text-xs font-medium hover:bg-primary-100"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Skor</span>
-                </button>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <button
+                    onClick={() => { setActiveTab('input'); handlePlayerChange(String(player.id)) }}
+                    className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-primary-50 text-primary-600 rounded-lg text-xs font-medium hover:bg-primary-100"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Skor</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeletePlayer(player)}
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    title={`Hapus ${player.name}`}
+                    aria-label={`Hapus ${player.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
 
