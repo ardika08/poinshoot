@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { RotateCcw, Trophy, Gamepad2, AlertCircle, Volume2, VolumeX } from 'lucide-react'
+import { UserMinus, Trophy, Gamepad2, AlertCircle, Volume2, VolumeX } from 'lucide-react'
 import api, { playerStorage } from '../lib/api'
 import sound from '../lib/sound'
 import useBoardConfig from '../hooks/useBoardConfig'
@@ -470,21 +470,19 @@ const PlayPage = () => {
   }
 
   // ---------- aksi ----------
-  const resetGame = () => {
-    setAttempts(0)
-    setTotalScore(0)
-    setLastScore(null)
-    setMessage('')
-    setGameComplete(false)
-    setShowResultModal(false)
-    setAttemptLog([])
-    setSaveError('')
-    setSaveResult(null)
-    setIsSaving(false)
-    setIsLocked(false)
-    setHitEffect(null)
-    setPopup(null)
-    setBall({ x: START.x, y: START.y, scale: 1, alpha: 1 })
+  // Ganti pemain: bersihkan identitas lalu kembali ke form registrasi.
+  // Wajib ada di tablet bersama supaya siswa berikutnya tidak main sebagai
+  // siswa sebelumnya. Tidak menyimpan apa pun — ronde resmi hanya dibuat saat
+  // tombol Simpan ditekan, jadi keluar di tengah ronde tidak menghanguskan
+  // ronde resmi siapa pun.
+  const handleSwitchPlayer = () => {
+    if (gameComplete && !saveResult
+      && !window.confirm('Skor belum disimpan. Ganti pemain dan buang skor ini?')) {
+      return
+    }
+    playerStorage.clear()
+    setPlayer(null)
+    navigate('/')
   }
 
   const handleSubmitScore = async () => {
@@ -519,6 +517,14 @@ const PlayPage = () => {
             Pemain: <span className="font-semibold text-gray-700">{playerName}</span>
           </p>
         )}
+        <button
+          onClick={handleSwitchPlayer}
+          className="absolute left-0 top-0 inline-flex items-center space-x-1 px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Ganti pemain (siswa berikutnya)"
+        >
+          <UserMinus className="w-4 h-4" />
+          <span>Ganti Pemain</span>
+        </button>
         <button
           onClick={() => setIsMuted(sound.toggleMute())}
           className="absolute right-0 top-0 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -683,12 +689,12 @@ const PlayPage = () => {
                 )}
               </button>
               <button
-                onClick={resetGame}
+                onClick={handleSwitchPlayer}
                 disabled={isSaving || Boolean(saveResult)}
                 className="btn-secondary w-full inline-flex items-center justify-center space-x-2 disabled:opacity-60"
               >
-                <RotateCcw className="w-4 h-4" />
-                <span>Main Lagi</span>
+                <UserMinus className="w-4 h-4" />
+                <span>Ganti Pemain</span>
               </button>
             </div>
           </motion.div>
