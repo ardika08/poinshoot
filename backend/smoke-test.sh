@@ -27,7 +27,8 @@ check "GET leaderboard/weekly"   200 "$(code $BASE/leaderboard/weekly)"
 check "GET leaderboard/monthly"  200 "$(code $BASE/leaderboard/monthly)"
 check "GET leaderboard/invalid"  404 "$(code $BASE/leaderboard/bogus)"
 check "GET simulation/config"    200 "$(code $BASE/simulation/config)"
-check "GET players/1"            200 "$(code $BASE/players/1)"
+# Jangan mengasumsikan id tertentu ada: DB produksi hanya berisi siswa asli.
+# "GET players/{id} yang ada" diuji dengan pemain yang baru dibuat (NEW_ID, di bawah).
 check "GET players/9999"         404 "$(code $BASE/players/9999)"
 check "GET players/lookup (found)" 200 "$(code -G "$BASE/players/lookup" --data-urlencode "name=Andi" --data-urlencode "rombel=4A")"
 check "GET players/lookup (no param)" 422 "$(code "$BASE/players/lookup")"
@@ -182,6 +183,27 @@ check "GET leaderboard?player_id" 200 "$(code "$BASE/leaderboard/all_time?player
 check "  you.player_id cocok" "$NEW_ID" "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['you']['player_id'])")"
 check "  you.final_score > 0" True "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['you']['final_score']>0)")"
 check "  you tetap ada walau limit=1" True "$(code "$BASE/leaderboard/all_time?player_id=$NEW_ID&limit=1" >/dev/null; python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(d['you'] is not None and len(d['top_players'])==1)")"
+
+echo "=== HAPUS PEMAIN (bersih-bersih data uji) ==="
+# Endpoint hapus pemain harus tertutup untuk publik.
+check "DELETE admin/players/{id} (tanpa token)" 401 "$(code -X DELETE $BASE/admin/players/$NEW_ID)"
+check "DELETE admin/players/999999 (tidak ada)" 404 "$(code -X DELETE $BASE/admin/players/999999 -H "$AUTH")"
+
+# Tiap run memakai $SUF unik, jadi semua akun uji run ini memuat $SUF di namanya.
+# Disapu di sini supaya smoke-test tidak menumpuk "Zaki Updated"/"Import Tempel"/
+# "Siswa Baru" di leaderboard setiap kali dijalankan.
+UJI_IDS=$(curl -s "$BASE/admin/players?search=$SUF&per_page=1000" -H "$AUTH" \
+  | python3 -c "import json,sys;print(' '.join(str(p['id']) for p in json.load(sys.stdin)['data']['players']))")
+echo "  -> $(( $(echo "$UJI_IDS" | wc -w) )) pemain uji dihapus"
+for id in $UJI_IDS; do
+  code -X DELETE "$BASE/admin/players/$id" -H "$AUTH" > /dev/null
+done
+
+SISA=$(curl -s "$BASE/admin/players?search=$SUF&per_page=1000" -H "$AUTH" \
+  | python3 -c "import json,sys;print(len(json.load(sys.stdin)['data']['players']))")
+check "  -> 0 pemain uji tersisa" 0 "$SISA"
+check "  -> GET players/$NEW_ID jadi 404" 404 "$(code $BASE/players/$NEW_ID)"
+check "  -> hilang dari leaderboard" True "$(code "$BASE/leaderboard/all_time?player_id=$NEW_ID" >/dev/null; python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['you'] is None)")"
 
 echo "=== LOGOUT ==="
 check "POST admin/logout"       200 "$(code -X POST $BASE/admin/logout -H "$AUTH")"

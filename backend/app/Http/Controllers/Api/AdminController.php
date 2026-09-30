@@ -372,6 +372,50 @@ class AdminController extends Controller
     }
 
     /**
+     * DELETE /api/v1/admin/players/{id} — hapus pemain beserta seluruh riwayatnya.
+     *
+     * Dipakai untuk membuang data uji atau salah input (mis. siswa salah rombel).
+     * Ronde dan game ikut dihapus — kalau tidak, baris yatim masih terbaca
+     * leaderboard dan skornya jadi "hantu" yang tak bisa dibersihkan dari UI.
+     */
+    public function destroyPlayer(Request $request, string $id)
+    {
+        /** @var Admin $admin */
+        $admin = $request->attributes->get('current_admin');
+
+        $player = Player::withCount(['rounds', 'games'])->find($id);
+
+        if (! $player) {
+            return response()->json([
+                'success' => false,
+                'error' => ['code' => 'PLAYER_NOT_FOUND', 'message' => 'Pemain tidak ditemukan'],
+            ], 404);
+        }
+
+        $deleted = [
+            'player_id' => $player->id,
+            'name' => $player->name,
+            'rombel' => $player->rombel,
+            'rounds' => $player->rounds_count,
+            'games' => $player->games_count,
+        ];
+
+        AdminLog::log($admin, 'delete_player', $player->id, $deleted);
+
+        DB::transaction(function () use ($player) {
+            $player->games()->delete();
+            $player->rounds()->delete();
+            $player->delete();
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $deleted,
+            'message' => 'Pemain '.$deleted['name'].' beserta riwayatnya dihapus',
+        ]);
+    }
+
+    /**
      * GET /api/v1/admin/stats — statistik dashboard
      */
     public function stats()

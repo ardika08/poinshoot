@@ -47,6 +47,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/players', [AdminController::class, 'storePlayers']);
             // Import massal: tempel dari Excel atau unggah .xlsx/.csv
             Route::post('/players/import', [AdminController::class, 'importPlayers']);
+            // Hapus pemain + seluruh riwayatnya (bersihkan data uji / salah input)
+            Route::delete('/players/{id}', [AdminController::class, 'destroyPlayer'])->whereNumber('id');
             Route::get('/logs', [AdminController::class, 'logs']);
 
             // Mode 1: input skor manual
