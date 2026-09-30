@@ -125,6 +125,13 @@ echo "bukan excel" > /tmp/import-lama.xls
 check "POST import (.xls lama ditolak)" 422 "$(code -X POST $BASE/admin/players/import -H "$AUTH" -F "file=@/tmp/import-lama.xls")"
 check "  -> kode IMPORT_UNREADABLE" IMPORT_UNREADABLE "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['error']['code'])")"
 
+# Aturan rombel 1A-6B dikunci di sini: baris ber-rombel lain (mis. 5C) harus
+# DILAPORKAN sebagai tidak terbaca, bukan disimpan diam-diam.
+TOLAK=$(python3 -c "import json;print(json.dumps({'text':'Gilang Pratama\t5C','dry_run':True}))")
+check "POST import (rombel 5C ditolak)" 200 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" -d "$TOLAK")"
+check "  -> 0 siswa ditambahkan"        0   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+check "  -> 1 baris tidak terbaca"      1   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['invalid'])")"
+
 echo "=== MANUAL SCORE INPUT (5 attempts) ==="
 for i in 1 2 3 4 5; do
   check "POST admin/games attempt $i" 201 "$(code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$NEW_ID,\"attempt_number\":$i,\"is_successful\":true,\"points\":30,\"zone_name\":\"h13\",\"game_mode\":\"manual\"}")"
