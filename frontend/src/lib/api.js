@@ -145,7 +145,7 @@ export const api = {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (rombel) params.set('rombel', rombel)
-    params.set('per_page', String(Math.min(perPage, 100)))
+    params.set('per_page', String(Math.min(perPage, 1000)))
     params.set('page', String(page))
     return request(`/admin/players?${params}`, { auth: true, signal })
   },
