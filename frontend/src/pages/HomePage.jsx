@@ -1,15 +1,34 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Target, Trophy, Gamepad2, Users, Zap, ArrowRight, Star, ClipboardCheck, CheckCircle2 } from 'lucide-react'
+import { Target, Trophy, Gamepad2, Users, Zap, ArrowRight, Star, ClipboardCheck, CheckCircle2, User, School } from 'lucide-react'
 import api, { ApiError, playerStorage } from '../lib/api'
 import useBoardConfig from '../hooks/useBoardConfig'
 import HeroAnimation from '../components/HeroAnimation'
+
+// Pilihan jenis pendaftaran. Disimpan di localStorage supaya operator bisa
+// menyiapkan perangkat (mode umum untuk gelar karya) lalu siswa tinggal pakai
+// tanpa mengubah apa pun — dan bisa dikembalikan ke mode sekolah kapan saja.
+const MODE_KEY = 'shoot_register_mode'
+const MODES = [
+  { id: 'general', label: 'Umum', hint: 'Cukup nama — gelar karya / acara kampus', icon: User },
+  { id: 'school', label: 'Sekolah', hint: 'Nama + rombel — pilih dari daftar kelas', icon: School },
+]
+
+const getSavedMode = () => {
+  try {
+    const saved = localStorage.getItem(MODE_KEY)
+    return MODES.some(m => m.id === saved) ? saved : 'general'
+  } catch {
+    return 'general'
+  }
+}
 
 const HomePage = () => {
   const navigate = useNavigate()
   const { board } = useBoardConfig()
   const maxAttempts = board.max_attempts
+  const [mode, setMode] = useState(getSavedMode)
   const [formData, setFormData] = useState({
     name: '',
     rombel: ''
@@ -36,7 +55,8 @@ const HomePage = () => {
   // Siswa tinggal memilih namanya → tidak perlu mengetik → tidak ada akun ganda
   // karena salah ejaan, dan skor manual dari lapangan A pasti tersambung.
   useEffect(() => {
-    if (!/^[1-6][A-Z]$/.test(formData.rombel)) {
+    // Daftar nama hanya relevan di mode sekolah
+    if (mode !== 'school' || !/^[1-6][A-Z]$/.test(formData.rombel)) {
       setRoster([])
       setIsLoadingRoster(false)
       return undefined
@@ -55,14 +75,27 @@ const HomePage = () => {
       })
 
     return () => controller.abort()
-  }, [formData.rombel])
+  }, [formData.rombel, mode])
+
+  const changeMode = (nextMode) => {
+    if (nextMode === mode) return
+    setMode(nextMode)
+    setError('')
+    setFormData({ name: '', rombel: '' })
+    setRoster([])
+    try {
+      localStorage.setItem(MODE_KEY, nextMode)
+    } catch {
+      // localStorage bisa diblokir (mode privat) — pilihan tetap jalan di sesi ini
+    }
+  }
 
   const validateForm = () => {
     if (!formData.name || formData.name.trim().length < 3) {
       setError('Nama minimal 3 karakter')
       return false
     }
-    if (!/^[1-6][A-Z]$/.test(formData.rombel)) {
+    if (mode === 'school' && !/^[1-6][A-Z]$/.test(formData.rombel)) {
       setError('Pilih rombel siswa, contoh 4A atau 4B')
       return false
     }
@@ -78,7 +111,11 @@ const HomePage = () => {
     setError('')
 
     try {
-      const player = await api.registerPlayer(formData.name.trim(), formData.rombel)
+      const player = await api.registerPlayer(
+        formData.name.trim(),
+        mode === 'school' ? formData.rombel : null,
+        mode,
+      )
       playerStorage.set({
         id: player.id,
         name: player.name,
@@ -92,7 +129,10 @@ const HomePage = () => {
         // Nama + rombel ini sudah terdaftar → siswa yang sama mendaftar ulang.
         // Lanjutkan ke akun yang sudah ada supaya skor manual + simulasi menyatu.
         try {
-          const { player: existing } = await api.lookupPlayer(formData.name.trim(), formData.rombel)
+          const { player: existing } = await api.lookupPlayer(
+            formData.name.trim(),
+            mode === 'school' ? formData.rombel : null,
+          )
           if (existing) {
             playerStorage.set({
               id: existing.id,
@@ -107,7 +147,9 @@ const HomePage = () => {
         } catch {
           // fallthrough ke pesan error
         }
-        setError('Nama ini sudah terdaftar di rombel tersebut. Hubungi admin jika ini bukan kamu.')
+        setError(mode === 'school'
+          ? 'Nama ini sudah terdaftar di rombel tersebut. Hubungi admin jika ini bukan kamu.'
+          : 'Nama ini sudah terdaftar. Tambahkan pembeda (contoh: asal sekolah) supaya tidak tertukar dengan peserta lain.')
       } else {
         setError(err.message || 'Gagal mendaftar. Coba lagi.')
       }
@@ -216,8 +258,40 @@ const HomePage = () => {
                 <Users className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
               </div>
               <h2 className="text-lg sm:text-xl font-display font-bold text-gray-900">Daftar Sekarang!</h2>
-              <p className="text-xs sm:text-sm text-gray-600 mt-1">Bergabung dan mulai bermain</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                {mode === 'school' ? 'Pilih kelas dan namamu, lalu mulai bermain' : 'Cukup tulis namamu, lalu mulai bermain'}
+              </p>
             </div>
+
+            {/* Pengalih jenis pendaftaran — Umum (gelar karya) / Sekolah.
+                Pilihan terakhir diingat perangkat, jadi operator bisa
+                menyiapkan tablet dalam mode umum dan siswa tinggal memakai. */}
+            <div className="grid grid-cols-2 gap-2 mb-4" role="tablist" aria-label="Jenis pendaftaran">
+              {MODES.map(({ id, label, icon: Icon }) => {
+                const active = mode === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => changeMode(id)}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl border-2 px-3 py-2 text-xs sm:text-sm font-semibold transition-colors outline-none focus:outline-none ${
+                      active
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className="text-[11px] text-gray-500 text-center -mt-2 mb-4">
+              {MODES.find(m => m.id === mode)?.hint}
+            </p>
 
             {success ? (
               <motion.div
@@ -235,16 +309,19 @@ const HomePage = () => {
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-3.5">
-                <div>
-                  <label htmlFor="rombel" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">Rombel</label>
-                  <select id="rombel" name="rombel" value={formData.rombel} onChange={handleChange} className="input-field bg-white">
-                    <option value="">-- Pilih Rombel --</option>
-                    {[1,2,3,4,5,6].flatMap(k => ['A','B'].map(r => `${k}${r}`)).map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
+                {/* --- Khusus mode SEKOLAH: rombel + daftar nama dari admin --- */}
+                {mode === 'school' && (
+                  <div>
+                    <label htmlFor="rombel" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5">Rombel</label>
+                    <select id="rombel" name="rombel" value={formData.rombel} onChange={handleChange} className="input-field bg-white">
+                      <option value="">-- Pilih Rombel --</option>
+                      {[1,2,3,4,5,6].flatMap(k => ['A','B'].map(r => `${k}${r}`)).map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 {/* Daftar nama dari admin — siswa tinggal memilih, tidak mengetik */}
-                {/^[1-6][A-Z]$/.test(formData.rombel) && (
+                {mode === 'school' && /^[1-6][A-Z]$/.test(formData.rombel) && (
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="block text-xs sm:text-sm font-medium text-gray-700">Pilih Namamu</label>
@@ -301,13 +378,21 @@ const HomePage = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
-                    placeholder={roster.length > 0 ? 'Atau ketik nama lengkapmu' : 'Masukkan nama lengkap'}
+                    placeholder={mode === 'general'
+                      ? 'Contoh: Ardika Yudha'
+                      : (roster.length > 0 ? 'Atau ketik nama lengkapmu' : 'Masukkan nama lengkap')}
                     className="input-field"
                     maxLength={100}
+                    autoComplete="off"
                   />
-                  {roster.length > 0 && (
+                  {mode === 'school' && roster.length > 0 && (
                     <p className="text-[11px] text-gray-400 mt-1">
                       Ketik hanya jika namamu belum ada di daftar atas — ejaannya harus sama dengan daftar admin.
+                    </p>
+                  )}
+                  {mode === 'general' && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Nama akan tampil di leaderboard. Kalau namamu sama dengan peserta lain, tambahkan pembeda (contoh: asal sekolah).
                     </p>
                   )}
                 </div>
@@ -333,7 +418,7 @@ const HomePage = () => {
                     </>
                   ) : (
                     <>
-                      <span>Daftar &amp; Mulai Main</span>
+                      <span>{mode === 'school' ? 'Daftar & Mulai Main' : 'Mulai Main'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

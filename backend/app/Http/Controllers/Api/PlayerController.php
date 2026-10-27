@@ -15,9 +15,13 @@ class PlayerController extends Controller
      */
     public function store(StorePlayerRequest $request)
     {
+        // Mode `general` (gelar karya / acara umum): cukup nama, rombel null.
+        // Disimpan di tabel yang sama supaya leaderboard tetap satu sumber.
+        $rombel = $request->validated('rombel') ?: null;
+
         $player = Player::create([
             'name' => $request->validated('name'),
-            'rombel' => $request->validated('rombel'),
+            'rombel' => $rombel,
             'is_active' => true,
         ]);
 
@@ -97,16 +101,20 @@ class PlayerController extends Controller
         $name = trim((string) $request->query('name', ''));
         $rombel = strtoupper(trim((string) $request->query('rombel', '')));
 
-        if ($name === '' || $rombel === '') {
+        if ($name === '') {
             return response()->json([
                 'success' => false,
-                'error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Parameter name dan rombel wajib diisi'],
+                'error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Parameter name wajib diisi'],
             ], 422);
         }
 
-        $player = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
-            ->where('rombel', $rombel)
-            ->first();
+        $query = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)]);
+
+        // Tanpa rombel = pemain mode umum (gelar karya). Dengan rombel =
+        // siswa sekolah, tetap dicocokkan per rombel seperti sebelumnya.
+        $player = $rombel === ''
+            ? $query->whereNull('rombel')->first()
+            : $query->where('rombel', $rombel)->first();
 
         return response()->json([
             'success' => true,

@@ -113,8 +113,9 @@ async function request(path, { method = 'GET', body, auth = false, signal } = {}
 
 export const api = {
   /** Registrasi pemain baru */
-  registerPlayer: (name, rombel) =>
-    request('/players', { method: 'POST', body: { name, rombel } }),
+  // mode: 'school' (nama + rombel) atau 'general' (nama saja, gelar karya)
+  registerPlayer: (name, rombel, mode = 'school') =>
+    request('/players', { method: 'POST', body: { name, rombel, mode } }),
 
   /** Cek apakah siswa (nama + rombel) sudah terdaftar */
   lookupPlayer: (name, rombel) =>
