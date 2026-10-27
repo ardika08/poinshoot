@@ -28,6 +28,26 @@ const TeamModal = () => {
   const [isOpen, setIsOpen] = useState(shouldShow)
   const panelRef = useRef(null)
   const startButtonRef = useRef(null)
+  const scrollRef = useRef(null)
+  // true kalau masih ada konten di bawah area pandang (HP pendek) —
+  // dipakai untuk memunculkan gradasi "masih bisa di-scroll" di atas tombol.
+  const [adaLagi, setAdaLagi] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const el = scrollRef.current
+    if (!el) return
+
+    const cek = () => setAdaLagi(el.scrollHeight - el.scrollTop - el.clientHeight > 4)
+    cek()
+    el.addEventListener('scroll', cek, { passive: true })
+    const ro = new ResizeObserver(cek)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', cek)
+      ro.disconnect()
+    }
+  }, [isOpen])
 
   // Kunci scroll halaman selama modal terbuka, lalu kembalikan persis
   // seperti semula (body punya overflow-x: hidden dari index.css).
@@ -98,52 +118,52 @@ const TeamModal = () => {
         transition={{ duration: 0.3, ease: 'easeOut' }}
         className="w-full max-w-4xl lg:max-w-5xl max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
-        <div className="overflow-y-auto">
+        <div ref={scrollRef} className="overflow-y-auto">
           <div className="lg:grid lg:grid-cols-2">
             {/* Foto tim — tingginya dibatasi di layar pendek supaya daftar
                 anggota tidak terdorong keluar. object-contain dipakai di semua
                 ukuran: seluruh foto selalu terlihat utuh, tidak ada wajah yang
                 terpotong. Sisa ruang diisi warna latar navy (letterbox). */}
-            <div className="relative flex items-center justify-center bg-primary-900">
+            <div className="relative flex items-center justify-center overflow-hidden bg-primary-900">
               <picture>
                 <source srcSet={team.photo.webp} type="image/webp" />
                 <img
                   src={team.photo.jpg}
                   alt={team.photo.alt}
-                  className="h-auto w-full max-h-[22vh] object-contain sm:max-h-[32vh] lg:max-h-none"
+                  className="h-auto w-full object-contain sm:max-h-[32vh] lg:max-h-none [@media(max-height:730px)]:h-[190px] [@media(max-height:730px)]:object-cover [@media(max-height:730px)]:object-top"
                   loading="eager"
                   decoding="async"
                 />
               </picture>
-              <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-primary-900/70 to-transparent lg:hidden" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-primary-900/60 to-transparent lg:hidden" />
             </div>
 
             {/* Identitas tim */}
-            <div className="p-4 sm:p-6">
-              <span className="inline-block rounded-full bg-primary-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary-700 ring-1 ring-primary-100">
+            <div className="px-4 pb-3 pt-3.5 sm:p-6">
+              <span className="inline-block rounded-full bg-primary-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary-700 ring-1 ring-primary-100 sm:px-3 sm:text-[11px]">
                 Proyek Kepemimpinan · {team.prodi}
               </span>
 
               <h2
                 id="team-modal-title"
-                className="mt-3 font-display text-xl sm:text-2xl font-bold leading-snug text-gray-900 text-balance"
+                className="mt-2 font-display text-xl font-bold leading-snug text-gray-900 text-balance sm:mt-3 sm:text-2xl"
               >
                 {team.headline}
               </h2>
-              <p className="mt-1.5 text-sm sm:text-base text-gray-600">
+              <p className="mt-1 text-xs text-gray-600 sm:mt-1.5 sm:text-base">
                 {team.subline}
               </p>
 
               <p
                 id="team-modal-desc"
-                className="mt-2 text-xs leading-relaxed text-gray-500 sm:mt-3 sm:text-sm"
+                className="mt-1.5 text-xs leading-relaxed text-gray-500 sm:mt-3 sm:text-sm"
               >
                 Inovasi pembelajaran {team.prodi} melalui integrasi permainan digital
                 dan fisik untuk meningkatkan keterampilan gerak dasar siswa sekolah dasar.
               </p>
 
               {/* Daftar anggota */}
-              <div className="mt-3 sm:mt-5">
+              <div className="mt-2.5 sm:mt-5">
                 <div className="flex items-center gap-2 text-gray-900">
                   <Users className="h-4 w-4 text-primary-600" />
                   <h3 className="text-sm font-semibold font-display">
@@ -154,7 +174,7 @@ const TeamModal = () => {
                   </span>
                 </div>
 
-                <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:mt-2.5 sm:grid-cols-2 sm:gap-y-1.5">
+                <ul className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-0 sm:mt-2.5 sm:grid-cols-2 sm:gap-y-1.5">
                   {team.members.map((member, index) => (
                     <li
                       key={`${member.name}-${index}`}
@@ -173,7 +193,7 @@ const TeamModal = () => {
                   ))}
                 </ul>
 
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-400 sm:mt-3">
+                <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-400 sm:mt-3">
                   <GraduationCap className="h-3.5 w-3.5" />
                   Program Studi {team.prodi}
                 </p>
@@ -183,7 +203,10 @@ const TeamModal = () => {
         </div>
 
         {/* Footer lengket — tombol Mulai selalu terlihat tanpa perlu scroll */}
-        <div className="sticky bottom-0 border-t border-gray-100 bg-white/95 px-4 py-3 sm:px-6 sm:py-4 backdrop-blur">
+        <div className="relative sticky bottom-0 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4">
+          {adaLagi && (
+            <div className="pointer-events-none absolute inset-x-0 -top-9 h-9 bg-gradient-to-t from-white/95 to-transparent" />
+          )}
           <button
             ref={startButtonRef}
             type="button"
