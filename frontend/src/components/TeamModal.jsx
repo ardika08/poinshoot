@@ -215,7 +215,7 @@ const TeamModal = () => {
             ref={startButtonRef}
             type="button"
             onClick={handleClose}
-            className="btn-primary flex w-full items-center justify-center gap-2 text-base sm:text-lg"
+            className="btn-primary flex w-full items-center justify-center gap-2 text-base outline-none focus:outline-none focus-visible:outline-none sm:text-lg"
           >
             Mulai
             <ArrowRight className="h-5 w-5" />
