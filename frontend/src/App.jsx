@@ -6,6 +6,7 @@ import LeaderboardPage from './pages/LeaderboardPage'
 import PlayPage from './pages/PlayPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
+import TeamModal from './components/TeamModal'
 
 function App() {
   return (
@@ -23,6 +24,9 @@ function App() {
       </main>
 
       <Footer />
+
+      {/* Modal sambutan tim — memblokir halaman sampai tombol Mulai ditekan */}
+      <TeamModal />
     </div>
   )
 }
