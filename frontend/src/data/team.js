@@ -1,9 +1,9 @@
 // ============================================================
 // Data tim untuk modal sambutan.
 //
-// GANTI placeholder di bawah dengan nama & NIM asli.
-// NIM ditulis sebagai STRING (pakai tanda kutip) supaya angka 0
-// di depan tidak hilang saat di-render.
+// Sumber: tabel daftar anggota tim (No. / Nama / NPM).
+// NPM ditulis sebagai STRING (pakai tanda kutip) supaya tidak
+// kehilangan digit kalau nanti ada angka 0 di depan.
 // ============================================================
 
 const team = {
@@ -22,18 +22,19 @@ const team = {
     alt: 'Foto bersama Tim Project Kepemimpinan PPG Gel. 1 Universitas Negeri Jakarta memegang papan Target Lempar Bola',
   },
 
-  // TODO: ganti nama + NIM. Ada 10 orang di foto, jadi 10 baris.
+  // Urutan sesuai tabel. Ejaan nama dibiarkan apa adanya sesuai dokumen
+  // (Nughraha, Kakombohi, Valentyno, Octavian, Tiffani).
   members: [
-    { name: 'Anggota 1', nim: '-' },
-    { name: 'Anggota 2', nim: '-' },
-    { name: 'Anggota 3', nim: '-' },
-    { name: 'Anggota 4', nim: '-' },
-    { name: 'Anggota 5', nim: '-' },
-    { name: 'Anggota 6', nim: '-' },
-    { name: 'Anggota 7', nim: '-' },
-    { name: 'Anggota 8', nim: '-' },
-    { name: 'Anggota 9', nim: '-' },
-    { name: 'Anggota 10', nim: '-' },
+    { name: 'Alif Putrawan', npm: '201272510035' },
+    { name: 'Ardika Yudha Gunantara', npm: '201272510100' },
+    { name: 'Daffa Setyo Nughraha', npm: '201272510076' },
+    { name: 'Herni Kakombohi', npm: '201272510070' },
+    { name: 'Muhammad Ghazi Al Ghifari', npm: '201272510097' },
+    { name: 'Muhammad Rozali', npm: '201272510050' },
+    { name: 'Radela Ryan Tiffani', npm: '201272510028' },
+    { name: 'Raihan Bima Octavian', npm: '201272510020' },
+    { name: 'Qois Valentyno', npm: '201272510001' },
+    { name: 'Yuda', npm: '201272510074' },
   ],
 }
 

@@ -96,21 +96,21 @@ const TeamModal = () => {
         initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="w-full max-w-4xl lg:max-w-5xl max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
         <div className="overflow-y-auto">
           <div className="lg:grid lg:grid-cols-2">
-            {/* Foto tim — di layar pendek tingginya dibatasi supaya daftar
-                anggota tidak terdorong keluar. object-contain = seluruh foto
-                tetap terlihat, tidak ada wajah yang terpotong (sisi kosong
-                diisi warna latar). Di layar lebar baru di-crop mengisi kolom. */}
-            <div className="relative flex items-center justify-center bg-primary-900 lg:block">
+            {/* Foto tim — tingginya dibatasi di layar pendek supaya daftar
+                anggota tidak terdorong keluar. object-contain dipakai di semua
+                ukuran: seluruh foto selalu terlihat utuh, tidak ada wajah yang
+                terpotong. Sisa ruang diisi warna latar navy (letterbox). */}
+            <div className="relative flex items-center justify-center bg-primary-900">
               <picture>
                 <source srcSet={team.photo.webp} type="image/webp" />
                 <img
                   src={team.photo.jpg}
                   alt={team.photo.alt}
-                  className="h-auto w-full max-h-[22vh] object-contain sm:max-h-[32vh] lg:h-full lg:max-h-none lg:object-cover"
+                  className="h-auto w-full max-h-[22vh] object-contain sm:max-h-[32vh] lg:max-h-none"
                   loading="eager"
                   decoding="async"
                 />
@@ -158,16 +158,16 @@ const TeamModal = () => {
                   {team.members.map((member, index) => (
                     <li
                       key={`${member.name}-${index}`}
-                      className="flex items-baseline gap-2 text-[13px] leading-snug sm:text-sm"
+                      className="flex items-baseline gap-2 text-[13px] leading-snug sm:text-sm lg:grid lg:grid-cols-[0.9rem_1fr] lg:items-start lg:gap-x-2 lg:gap-y-0.5 lg:text-sm"
                     >
-                      <span className="w-4 shrink-0 text-right text-xs font-mono text-gray-400">
+                      <span className="w-4 shrink-0 text-right text-xs font-mono text-gray-400 lg:row-span-2 lg:w-auto lg:pt-0.5">
                         {index + 1}.
                       </span>
-                      <span className="min-w-0 flex-1 truncate font-medium text-gray-800">
+                      <span className="min-w-0 flex-1 break-words font-medium text-gray-800">
                         {member.name}
                       </span>
-                      <span className="shrink-0 font-mono text-xs text-gray-500">
-                        {member.nim}
+                      <span className="shrink-0 font-mono text-[11px] text-gray-500 sm:text-xs lg:col-start-2 lg:text-[11px]">
+                        {member.npm}
                       </span>
                     </li>
                   ))}
