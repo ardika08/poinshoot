@@ -46,3 +46,7 @@ Thumbs.db
 .env.local
 .env.*.local
 backend/.env
+
+# Backup env (berisi kredensial) — jangan pernah masuk repo
+.env.bak*
+*.env.bak*
