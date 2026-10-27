@@ -38,3 +38,11 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+.vercel
+# Rahasia tetap di luar repo, tapi contoh & env produksi frontend
+# (isinya hanya path /api/v1, bukan kredensial) tetap ikut supaya
+# build di Vercel konsisten.
+.env
+.env.local
+.env.*.local
+backend/.env
