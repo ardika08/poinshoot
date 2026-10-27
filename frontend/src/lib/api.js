@@ -138,13 +138,15 @@ export const api = {
    * Leaderboard: scope = all_time | weekly | monthly.
    *
    * Opsi:
+   *  - kategori : 'umum' | 'sekolah' → pisahkan papan gelar karya vs sekolah
    *  - rombel   : 1A-6B → batasi papan ke satu kelas
    *  - playerId : sertakan "posisi kamu" walau di luar peringkat yang ditampilkan
    *  - limit    : jumlah baris (default server: 10)
    *  - signal   : AbortController
    */
-  getLeaderboard: (scope = 'all_time', { rombel, playerId, limit, signal } = {}) => {
+  getLeaderboard: (scope = 'all_time', { kategori, rombel, playerId, limit, signal } = {}) => {
     const params = new URLSearchParams()
+    if (kategori) params.set('kategori', kategori)
     if (rombel) params.set('rombel', rombel)
     if (playerId) params.set('player_id', playerId)
     if (limit) params.set('limit', limit)

@@ -27,6 +27,10 @@ class LeaderboardController extends Controller
      * Leaderboard skor final = manual resmi + simulasi resmi.
      *
      * Query opsional:
+     *  - kategori  : 'umum' (pendaftar nama saja) | 'sekolah' (punya rombel).
+     *                Kosong = gabungan keduanya (perilaku lama, dipakai
+     *                admin/statistik). Papan Umum dan Sekolah dipisah karena
+     *                pesertanya berbeda jenis acara.
      *  - rombel    : 1A-6B → batasi papan ke satu kelas (anak melihat teman sekelasnya)
      *  - player_id : id pemain yang sedang bermain → sertakan "posisi kamu"
      *  - limit     : jumlah baris yang dikirim (default 10, maks 100)
@@ -55,6 +59,24 @@ class LeaderboardController extends Controller
 
         $playerId = is_numeric($request->query('player_id')) ? (int) $request->query('player_id') : null;
 
+        // Kategori papan: umum (tanpa rombel) vs sekolah (punya rombel).
+        $kategori = $request->query('kategori');
+        $kategori = ($kategori === null || $kategori === '') ? null : (string) $kategori;
+        if ($kategori !== null && ! in_array($kategori, ['umum', 'sekolah'], true)) {
+            return response()->json([
+                'success' => false,
+                'error' => ['code' => 'INVALID_KATEGORI', 'message' => 'Invalid kategori. Use: umum, sekolah'],
+            ], 400);
+        }
+
+        // Filter kelas hanya masuk akal di kategori sekolah.
+        if ($kategori === 'umum' && $rombel !== null) {
+            return response()->json([
+                'success' => false,
+                'error' => ['code' => 'INVALID_PARAM', 'message' => 'Papan umum tidak memakai filter rombel'],
+            ], 400);
+        }
+
         $rawLimit = $request->query('limit');
         $limit = max(1, min(is_numeric($rawLimit) ? (int) $rawLimit : 10, 100));
 
@@ -68,6 +90,8 @@ class LeaderboardController extends Controller
         // Kandidat = pemain pada tampilan ini (seluruh sekolah, atau satu rombel saja).
         $candidates = Player::query()
             ->where('is_active', true)
+            ->when($kategori === 'umum', fn ($q) => $q->whereNull('rombel'))
+            ->when($kategori === 'sekolah', fn ($q) => $q->whereNotNull('rombel'))
             ->when($rombel !== null, fn ($q) => $q->where('rombel', $rombel))
             ->with(['rounds' => function ($q) use ($start) {
                 $q->where('is_archived', false);
@@ -135,6 +159,7 @@ class LeaderboardController extends Controller
             'success' => true,
             'data' => [
                 'scope' => $scope,
+                'kategori' => $kategori,
                 'rombel' => $rombel,
                 'period' => ['start' => $start?->toIso8601String(), 'end' => $now->toIso8601String()],
                 'top_players' => $top,
