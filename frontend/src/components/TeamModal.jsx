@@ -120,17 +120,21 @@ const TeamModal = () => {
       >
         <div ref={scrollRef} className="overflow-y-auto">
           <div className="lg:grid lg:grid-cols-2">
-            {/* Foto tim — tingginya dibatasi di layar pendek supaya daftar
-                anggota tidak terdorong keluar. object-contain dipakai di semua
-                ukuran: seluruh foto selalu terlihat utuh, tidak ada wajah yang
-                terpotong. Sisa ruang diisi warna latar navy (letterbox). */}
-            <div className="relative flex items-center justify-center overflow-hidden bg-primary-900">
+            {/* Foto tim.
+                HP: wadah berasio tetap supaya gambar SELALU selebar panel
+                (tanpa bar navy di samping). Rasio 4:3 = rasio foto asli, jadi
+                tidak ada yang terpotong di HP normal; khusus layar pendek
+                (<=730px) rasio dipepetkan dan gambar di-anchor ke atas —
+                hanya bagian kaki yang terpotong, kepala tetap utuh.
+                Tablet/desktop: gambar utuh (object-contain) dengan tinggi
+                dibatasi supaya daftar anggota tidak terdorong keluar. */}
+            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-primary-900 sm:aspect-auto [@media(max-height:730px)_and_(max-width:639px)]:aspect-[351/190]">
               <picture>
                 <source srcSet={team.photo.webp} type="image/webp" />
                 <img
                   src={team.photo.jpg}
                   alt={team.photo.alt}
-                  className="h-auto w-full object-contain sm:max-h-[32vh] lg:max-h-none [@media(max-height:730px)]:h-[190px] [@media(max-height:730px)]:object-cover [@media(max-height:730px)]:object-top"
+                  className="absolute inset-0 h-full w-full object-cover object-top sm:static sm:h-auto sm:max-h-[32vh] sm:object-contain lg:max-h-none"
                   loading="eager"
                   decoding="async"
                 />
