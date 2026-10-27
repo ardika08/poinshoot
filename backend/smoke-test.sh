@@ -41,9 +41,11 @@ check "POST players (valid)"      201 "$(code -X POST $BASE/players -H 'Content-
 NEW_ID=$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['id'])")
 check "POST players (nama+rombel sama)" 409 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B\",\"rombel\":\"4A\"}")"
 check "POST players (nama sama rombel beda)" 201 "$(code -X POST $BASE/players -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B\",\"rombel\":\"4B\"}")"
-check "PUT players/$NEW_ID"       200 "$(code -X PUT $BASE/players/$NEW_ID -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B_UP\",\"rombel\":\"4A\"}")"
+# Route publik PUT /players/{id} sudah ditutup (dulu siapa pun bisa mengubah
+# nama/rombel pemain). Yang benar sekarang: 405 Method Not Allowed.
+check "PUT players/$NEW_ID (publik, ditutup)" 405 "$(code -X PUT $BASE/players/$NEW_ID -H 'Content-Type: application/json' -d "{\"name\":\"$NAME_B_UP\",\"rombel\":\"4A\"}")"
 check "GET players/$NEW_ID (scores)" 200 "$(code $BASE/players/$NEW_ID)"
-code -G "$BASE/players/lookup" --data-urlencode "name=$NAME_B_UP" --data-urlencode "rombel=4A" >/dev/null
+code -G "$BASE/players/lookup" --data-urlencode "name=$NAME_B" --data-urlencode "rombel=4A" >/dev/null
 check "  lookup.exists = true" True "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['exists'])")"
 code -G "$BASE/players/lookup" --data-urlencode "name=Tidak Ada $SUF" --data-urlencode "rombel=4A" >/dev/null
 check "  lookup.exists = false" False "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['exists'])")"

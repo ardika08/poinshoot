@@ -17,8 +17,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminAuth::class,
         ]);
-        
-        // CORS setup (also in bootstrap/app.php if using Laravel 11+)
+
+        // Header keamanan untuk semua respons API
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
+        // Backend berada di belakang proxy Vercel saat frontend di-deploy
+        // ke sana. Tanpa ini, semua request terlihat berasal dari IP Vercel
+        // sehingga rate limit per-IP akan menumpuk untuk semua siswa.
+        $middleware->trustProxies(at: '*', headers: \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

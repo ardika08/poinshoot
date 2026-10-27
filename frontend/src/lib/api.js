@@ -3,7 +3,7 @@
  * Semua request ke backend Laravel lewat sini.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://43.134.66.81:8082/api/v1'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://43.134.66.81:8083/api/v1'
 
 const ADMIN_TOKEN_KEY = 'shoot_admin_token'
 const PLAYER_KEY = 'shoot_player'

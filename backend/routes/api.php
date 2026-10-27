@@ -16,26 +16,39 @@ use App\Http\Controllers\Api\SimulationController;
 Route::prefix('v1')->group(function () {
 
     // ---------- PUBLIC ----------
-    Route::post('/players', [PlayerController::class, 'store']);
-    Route::get('/players/lookup', [PlayerController::class, 'lookup']);
-    // Daftar nama per rombel — dipakai lapangan B: siswa pilih nama, tidak mengetik
-    Route::get('/players/roster', [PlayerController::class, 'roster']);
-    Route::get('/players/{id}', [PlayerController::class, 'show'])->whereNumber('id');
-    Route::put('/players/{id}', [PlayerController::class, 'update'])->whereNumber('id');
+    // Pendaftaran & pencarian pemain dibatasi 60 request/menit per IP.
+    Route::middleware('throttle:player-write')->group(function () {
+        Route::post('/players', [PlayerController::class, 'store']);
+    });
 
-    Route::get('/leaderboard/{scope}', [LeaderboardController::class, 'index'])
-        ->where('scope', 'all_time|weekly|monthly');
+    // Endpoint baca publik dibatasi 120 request/menit per IP.
+    Route::middleware('throttle:public-api')->group(function () {
+        Route::get('/players/lookup', [PlayerController::class, 'lookup']);
+        // Daftar nama per rombel — dipakai lapangan B: siswa pilih nama, tidak mengetik
+        Route::get('/players/roster', [PlayerController::class, 'roster']);
+        Route::get('/players/{id}', [PlayerController::class, 'show'])->whereNumber('id');
+    });
 
-    // Statistik publik untuk homepage (angka agregat saja, tanpa data personal)
-    Route::get('/stats', [LeaderboardController::class, 'publicStats']);
+    // PUT /players/{id} dihapus: sebelumnya terbuka untuk publik sehingga
+    // siapa pun bisa mengubah nama/rombel pemain. Tidak dipakai frontend.
+
+    Route::middleware('throttle:public-api')->group(function () {
+        Route::get('/leaderboard/{scope}', [LeaderboardController::class, 'index'])
+            ->where('scope', 'all_time|weekly|monthly');
+
+        // Statistik publik untuk homepage (angka agregat saja, tanpa data personal)
+        Route::get('/stats', [LeaderboardController::class, 'publicStats']);
+    });
 
     // Mode 2: game simulasi di HP (tanpa login)
     Route::get('/simulation/config', [SimulationController::class, 'config']);
-    Route::post('/simulation/rounds', [SimulationController::class, 'store']);
+    Route::post('/simulation/rounds', [SimulationController::class, 'store'])
+        ->middleware('throttle:sim-round');
 
     // ---------- ADMIN ----------
     Route::prefix('admin')->group(function () {
-        Route::post('/login', [AdminController::class, 'login']);
+        // Dibatasi 5 percobaan/menit per username+IP (anti brute force)
+        Route::post('/login', [AdminController::class, 'login'])->middleware('throttle:login');
 
         Route::middleware('admin')->group(function () {
             Route::post('/logout', [AdminController::class, 'logout']);
