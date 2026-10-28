@@ -45,9 +45,15 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Endpoint baca publik (leaderboard, stats, roster, lookup).
-        // Dashboard admin melakukan polling 6x/menit, jadi 120/menit aman.
+        //
+        // PENTING: saat acara, puluhan peserta memakai satu jaringan (wifi
+        // kampus/sekolah) sehingga IP publiknya SAMA. Batas per-IP yang ketat
+        // akan memblokir sebagian anak tanpa alasan. 600/menit per IP masih
+        // menyaring penyalahgunaan, tapi cukup untuk ~100 peserta sekaligus.
+        // Kunci dikombinasikan dengan User-Agent supaya satu perangkat yang
+        // loop tidak menghabiskan jatah perangkat lain di jaringan yang sama.
         RateLimiter::for('public-api', function (Request $request) {
-            return Limit::perMinute(120)->by($request->ip());
+            return Limit::perMinute(600)->by($request->ip() . '|' . substr($request->userAgent() ?? '', 0, 80));
         });
 
         // Kirim hasil simulasi: satu siswa hanya punya satu ronde resmi,
@@ -56,10 +62,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($request->ip());
         });
 
-        // Pendaftaran/pencarian pemain: dipakai berulang saat acara
-        // (satu kelas mendaftar), jadi longgar tapi tetap terbatas.
+        // Pendaftaran pemain: dipakai berulang saat acara (satu kelas
+        // mendaftar hampir bersamaan dari wifi yang sama). Karena itu batas
+        // per-IP dibuat longgar; proteksi disalahgunakan tetap dijaga lewat
+        // validasi nama unik di StorePlayerRequest.
         RateLimiter::for('player-write', function (Request $request) {
-            return Limit::perMinute(60)->by($request->ip());
+            return Limit::perMinute(300)->by($request->ip());
         });
     }
 }
