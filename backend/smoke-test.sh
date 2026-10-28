@@ -135,6 +135,49 @@ check "POST import (rombel 5C ditolak)" 200 "$(code -X POST $BASE/admin/players/
 check "  -> 0 siswa ditambahkan"        0   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
 check "  -> 1 baris tidak terbaca"      1   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['invalid'])")"
 
+# --- Rombel UMUM (peserta gelar karya) -------------------------------------
+# "UMUM" harus diterima sebagai rombel, disimpan sebagai rombel kosong, dan
+# masuk papan peringkat Umum — bukan papan sekolah.
+# Payload disusun lewat berkas JSON (bukan inline) supaya karakter tab pada
+# data tempelan tidak rusak oleh kutip berlapis di shell.
+python3 - "$IMP_C" > /tmp/umum-req.json <<'PYJSON'
+import json, sys
+c = sys.argv[1]
+print(json.dumps({'rombel': 'UMUM', 'names': [c + ' Umum Satu', c + ' Umum Dua']}))
+PYJSON
+check "POST admin/players (rombel UMUM)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" --data-binary @/tmp/umum-req.json)"
+check "  -> 2 siswa ditambahkan"         2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+check "  -> rombel dilaporkan UMUM"      UMUM "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['rombel'])")"
+
+# Ulang kiriman yang sama → harus terdeteksi duplikat (bukan ditambah lagi).
+check "POST admin/players (UMUM ulang)"  201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" --data-binary @/tmp/umum-req.json)"
+check "  -> 0 ditambahkan, 2 duplikat"   0/2 "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(str(d['added'])+'/'+str(d['duplicate']))")"
+
+# Nama sama tapi di rombel sekolah tetap boleh (identitas = nama + rombel).
+python3 - "$IMP_C" > /tmp/umum-sekolah.json <<'PYJSON'
+import json, sys
+print(json.dumps({'rombel': '5A', 'names': [sys.argv[1] + ' Umum Satu']}))
+PYJSON
+check "POST admin/players (nama sama di 5A)" 201 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" --data-binary @/tmp/umum-sekolah.json)"
+check "  -> dianggap siswa baru"        1   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+
+# Rombel ngawur tetap ditolak, dan "UMUM" tidak membuka pintu untuk nilai lain.
+check "POST admin/players (rombel UMUMX)" 422 "$(code -X POST $BASE/admin/players -H 'Content-Type: application/json' -H "$AUTH" -d '{"rombel":"UMUMX","names":["Nama Panjang Sekali"]}')"
+
+# Import: baris bertanda UMUM harus terbaca (huruf besar & kecil), dan
+# ringkasannya memakai label UMUM — bukan kunci kosong.
+python3 - "$IMP_C" > /tmp/umum-import.json <<'PYJSON'
+import json, sys
+c = sys.argv[1]
+print(json.dumps({'text': c + ' Gelar A\tUMUM\n' + c + ' Gelar B\tumum', 'dry_run': True}))
+PYJSON
+check "POST import (baris UMUM, periksa)" 200 "$(code -X POST $BASE/admin/players/import -H 'Content-Type: application/json' -H "$AUTH" --data-binary @/tmp/umum-import.json)"
+check "  -> 2 siswa terbaca"              2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['added'])")"
+check "  -> ringkasan berkunci UMUM"      2   "$(python3 -c "import json;print(json.load(open('/tmp/resp.json'))['data']['by_rombel'].get('UMUM',0))")"
+
+check "GET admin/players?rombel=UMUM"    200 "$(code "$BASE/admin/players?rombel=UMUM" -H "$AUTH")"
+check "  -> filter UMUM berisi pemain"    1 "$(python3 -c "import json;d=json.load(open('/tmp/resp.json'))['data'];print(1 if d.get('players') else 0)")"
+
 echo "=== MANUAL SCORE INPUT (5 attempts) ==="
 for i in 1 2 3 4 5; do
   check "POST admin/games attempt $i" 201 "$(code -X POST $BASE/admin/games -H 'Content-Type: application/json' -H "$AUTH" -d "{\"player_id\":$NEW_ID,\"attempt_number\":$i,\"is_successful\":true,\"points\":30,\"zone_name\":\"h13\",\"game_mode\":\"manual\"}")"

@@ -48,7 +48,12 @@ Route::prefix('v1')->group(function () {
     // ---------- ADMIN ----------
     Route::prefix('admin')->group(function () {
         // Dibatasi 5 percobaan/menit per username+IP (anti brute force)
-        Route::post('/login', [AdminController::class, 'login'])->middleware('throttle:login');
+        // Throttle TIDAK dipasang di sini: kalau dipasang sebagai middleware,
+        // semua percobaan ikut dihitung — termasuk login yang BERHASIL. Akibatnya
+        // operator yang login/logout beberapa kali saat acara bisa terkunci
+        // padahal tidak ada percobaan gagal. Pembatasan dilakukan di dalam
+        // AdminController::login() dan hanya menghitung percobaan GAGAL.
+        Route::post('/login', [AdminController::class, 'login']);
 
         Route::middleware('admin')->group(function () {
             Route::post('/logout', [AdminController::class, 'logout']);

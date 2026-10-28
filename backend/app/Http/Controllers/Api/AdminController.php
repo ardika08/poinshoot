@@ -15,6 +15,9 @@ use App\Services\StudentListParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class AdminController extends Controller
@@ -24,9 +27,38 @@ class AdminController extends Controller
      */
     public function login(AdminLoginRequest $request)
     {
+        // --- Batas percobaan GAGAL (anti brute force) -------------------------
+        // Sengaja dihitung per username+IP dan hanya untuk percobaan yang gagal,
+        // supaya operator tidak pernah terkunci hanya karena sering login/logout
+        // saat acara berlangsung.
+        $username = Str::lower((string) $request->validated('username'));
+        $kunciGagal = 'login-gagal:'.$username.'|'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($kunciGagal, 5)) {
+            $detik = RateLimiter::availableIn($kunciGagal);
+
+            // Catat di log aplikasi (bukan AdminLog — butuh admin yang login,
+            // dan di sini justru belum ada admin yang berhasil masuk).
+            Log::warning('Login diblokir karena terlalu banyak percobaan gagal', [
+                'username' => $username,
+                'ip' => $request->ip(),
+                'retry_after' => $detik,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => [
+                    'code' => 'TOO_MANY_ATTEMPTS',
+                    'message' => "Terlalu banyak percobaan login gagal. Coba lagi dalam {$detik} detik.",
+                ],
+            ], 429);
+        }
+
         $admin = Admin::where('username', $request->validated('username'))->first();
 
         if (! $admin || ! Hash::check($request->validated('password'), $admin->password)) {
+            RateLimiter::hit($kunciGagal, 60);
+
             return response()->json([
                 'success' => false,
                 'error' => [
@@ -37,6 +69,7 @@ class AdminController extends Controller
         }
 
         if (! $admin->is_active) {
+            RateLimiter::hit($kunciGagal, 60);
             AdminLog::log($admin, 'login_failed', null, ['reason' => 'account_disabled']);
 
             return response()->json([
@@ -47,6 +80,9 @@ class AdminController extends Controller
                 ],
             ], 403);
         }
+
+        // Login berhasil → bersihkan hitungan gagal, bukan menambah.
+        RateLimiter::clear($kunciGagal);
 
         $token = $admin->generateToken();
         AdminLog::log($admin, 'login');
@@ -116,7 +152,12 @@ class AdminController extends Controller
         $query = Player::query()->with(['rounds' => fn ($q) => $q->select('id', 'player_id', 'game_mode', 'total_score')]);
 
         if ($rombel !== '') {
-            $query->where('rombel', $rombel);
+            // "UMUM" = peserta gelar karya, tersimpan sebagai rombel NULL.
+            // `where('rombel', 'UMUM')` tidak akan pernah cocok, jadi perlu
+            // diterjemahkan ke whereNull.
+            $rombel === AdminStorePlayersRequest::ROMBEL_UMUM
+                ? $query->whereNull('rombel')
+                : $query->where('rombel', $rombel);
         }
 
         if ($search !== '') {
@@ -168,7 +209,10 @@ class AdminController extends Controller
      */
     public function storePlayers(AdminStorePlayersRequest $request)
     {
-        $rombel = $request->validated('rombel');
+        // "UMUM" = peserta gelar karya → disimpan sebagai rombel null,
+        // supaya masuk papan Umum dan tidak bercampur dengan siswa sekolah.
+        $rombelInput = $request->validated('rombel');
+        $rombel = $rombelInput === AdminStorePlayersRequest::ROMBEL_UMUM ? null : $rombelInput;
         $names = $request->validated('names');
 
         $pairs = array_map(
@@ -178,13 +222,15 @@ class AdminController extends Controller
 
         $result = $this->persistStudentRecords($pairs);
 
-        $totalInRombel = Player::where('rombel', $rombel)->count();
+        $totalInRombel = $rombel === null
+            ? Player::whereNull('rombel')->count()
+            : Player::where('rombel', $rombel)->count();
 
         /** @var Admin $admin */
         $admin = $request->attributes->get('current_admin');
 
         AdminLog::log($admin, 'add_players', null, [
-            'rombel' => $rombel,
+            'rombel' => $rombelInput,
             'added' => count($result['added']),
             'duplicate' => count($result['duplicate']),
             'invalid' => count($result['invalid']),
@@ -193,7 +239,7 @@ class AdminController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
-                'rombel' => $rombel,
+                'rombel' => $rombelInput,
                 'added' => count($result['added']),
                 'duplicate' => count($result['duplicate']),
                 'invalid' => count($result['invalid']),
@@ -202,7 +248,7 @@ class AdminController extends Controller
                 'invalid_names' => $result['invalid'],
                 'total_in_rombel' => $totalInRombel,
             ],
-            'message' => count($result['added']).' siswa ditambahkan ke rombel '.$rombel,
+            'message' => count($result['added']).' siswa ditambahkan ke '.($rombel === null ? 'peserta Umum' : 'rombel '.$rombel),
         ], 201);
     }
 
@@ -260,7 +306,10 @@ class AdminController extends Controller
         $byRombel = [];
 
         foreach ($parsed['records'] as $record) {
-            $byRombel[$record['rombel']] = ($byRombel[$record['rombel']] ?? 0) + 1;
+            // Rombel null = peserta Umum; beri label "UMUM" supaya tidak
+            // menjadi kunci kosong ("") di JSON ringkasan.
+            $label = $record['rombel'] ?? AdminStorePlayersRequest::ROMBEL_UMUM;
+            $byRombel[$label] = ($byRombel[$label] ?? 0) + 1;
         }
 
         ksort($byRombel);
@@ -325,7 +374,14 @@ class AdminController extends Controller
         $process = function () use ($pairs, $dryRun, &$added, &$duplicates, &$invalid, &$seen) {
             foreach ($pairs as $pair) {
                 $name = trim((string) ($pair['name'] ?? ''));
-                $rombel = trim((string) ($pair['rombel'] ?? ''));
+                // Rombel null = peserta Umum (gelar karya). Jangan diubah jadi
+                // string kosong, karena query `where('rombel', '')` tidak akan
+                // pernah cocok dengan kolom NULL → semua nama dianggap baru
+                // dan duplikat tidak terdeteksi.
+                $rombelRaw = $pair['rombel'] ?? null;
+                $rombel = ($rombelRaw === null || $rombelRaw === '')
+                    ? null
+                    : trim((string) $rombelRaw);
                 $key = $rombel.'|'.mb_strtolower($name);
 
                 if (mb_strlen($name) < 3) {
@@ -343,9 +399,13 @@ class AdminController extends Controller
 
                 $seen[$key] = true;
 
-                $exists = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
-                    ->where('rombel', $rombel)
-                    ->exists();
+                $existsQuery = Player::whereRaw('LOWER(name) = ?', [mb_strtolower($name)]);
+
+                $rombel === null
+                    ? $existsQuery->whereNull('rombel')
+                    : $existsQuery->where('rombel', $rombel);
+
+                $exists = $existsQuery->exists();
 
                 if ($exists) {
                     $duplicates[] = $name;

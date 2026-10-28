@@ -7,4 +7,20 @@
  */
 export const ROMBELS = [1, 2, 3, 4, 5, 6].flatMap((k) => ['A', 'B'].map((r) => `${k}${r}`))
 
+/**
+ * Nilai "rombel" untuk peserta gelar karya / acara umum (tanpa kelas sekolah).
+ * Backend menerjemahkannya menjadi kolom rombel kosong, sehingga peserta ini
+ * masuk papan peringkat Umum — terpisah dari papan siswa sekolah.
+ */
+export const ROMBEL_UMUM = 'UMUM'
+
+/** Pilihan rombel di panel admin: semua kelas + Umum. */
+export const ROMBEL_OPTIONS = [...ROMBELS, ROMBEL_UMUM]
+
+/** Label yang ramah dibaca untuk sebuah nilai rombel. */
+export const labelRombel = (rombel) =>
+  (rombel === ROMBEL_UMUM || rombel === null || rombel === undefined || rombel === ''
+    ? 'Umum'
+    : `Kelas ${rombel}`)
+
 export default ROMBELS

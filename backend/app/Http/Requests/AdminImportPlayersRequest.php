@@ -34,7 +34,8 @@ class AdminImportPlayersRequest extends FormRequest
         return [
             'file' => ['required_without:text', 'nullable', 'file', 'max:5120'],
             'text' => ['required_without:file', 'nullable', 'string', 'max:200000'],
-            'rombel' => ['nullable', 'string', 'regex:/^[1-6][AB]$/'],
+            // Rombel sekolah (1A-6B) atau UMUM untuk peserta gelar karya.
+            'rombel' => ['nullable', 'string', 'regex:/^([1-6][AB]|UMUM)$/'],
             'dry_run' => ['nullable', 'boolean'],
         ];
     }

@@ -110,7 +110,15 @@ class StudentListParser
      */
     public function normalize(array $rows, ?string $defaultRombel = null): array
     {
-        $defaultRombel = $defaultRombel !== null ? $this->normalizeRombel($defaultRombel) : null;
+        // Rombel bawaan bisa berupa rombel sekolah (1A-6B) atau "UMUM".
+        // Simpan penanda apakah bawaan sudah ditetapkan, supaya nilai null
+        // (hasil dari "UMUM") tidak tertukar dengan "tidak ada bawaan".
+        $adaBawaan = false;
+
+        if ($defaultRombel !== null && trim((string) $defaultRombel) !== '') {
+            $adaBawaan = true;
+            $defaultRombel = $this->normalizeRombel($defaultRombel);
+        }
 
         $records = [];
         $invalid = [];
@@ -137,13 +145,16 @@ class StudentListParser
             }
 
             $rombel = null;
+            $rombelDiketahui = false;   // true kalau sel rombel sudah ditemukan (termasuk UMUM)
             $nameParts = [];
 
             foreach ($cells as $cell) {
                 $candidate = $this->normalizeRombel($cell);
 
-                // Kolom pertama yang berbentuk rombel dipakai sebagai rombel
-                if ($rombel === null && $candidate !== null) {
+                // Sel yang bentuknya rombel (1A-6B) ATAU kata "UMUM" dipakai
+                // sebagai kolom rombel, lalu tidak dianggap bagian nama.
+                if (! $rombelDiketahui && ($candidate !== null || $this->isRombelUmum($cell))) {
+                    $rombelDiketahui = true;
                     $rombel = $candidate;
 
                     continue;
@@ -163,9 +174,14 @@ class StudentListParser
                 continue;
             }
 
-            $rombel ??= $defaultRombel;
+            // Rombel bawaan hanya mengisi baris yang rombelnya TIDAK tertulis.
+            // Baris yang menulis "UMUM" sudah dianggap jelas (rombel kosong),
+            // jadi jangan ditimpa nilai bawaan.
+            if (! $rombelDiketahui) {
+                $rombel = $defaultRombel;
+            }
 
-            if ($rombel === null) {
+            if (! $rombelDiketahui && ! $adaBawaan) {
                 $invalid[] = ['name' => $name, 'reason' => 'Rombel tidak ada di file maupun pilihan'];
 
                 continue;
@@ -445,8 +461,36 @@ class StudentListParser
         $candidate = preg_replace('/^(KELAS|KLS|CLASS)\s*/u', '', $candidate) ?? $candidate;
         $candidate = preg_replace('/\s+/u', '', $candidate) ?? $candidate;
 
+        // "UMUM" = peserta gelar karya / acara umum (tanpa rombel sekolah).
+        // Disimpan sebagai null di kolom rombel; dikenali di sini supaya
+        // operator boleh menulisnya di file Excel maupun pilihan bawaan.
+        if ($this->isRombelUmumValue($candidate)) {
+            return null;
+        }
+
         // Rombel = angka 1-6 + huruf A/B.
         return preg_match('/^[1-6][AB]$/', $candidate) ? $candidate : null;
+    }
+
+    /**
+     * Apakah sel ini menyebut "Umum" (peserta gelar karya)?
+     *
+     * Dipisah dari `normalizeRombel` karena keduanya sama-sama menghasilkan
+     * `null` untuk kolom rombel, padahal artinya berbeda: "UMUM" = rombel
+     * diketahui (kosong), sedangkan sel lain = bukan kolom rombel.
+     */
+    private function isRombelUmum(string $value): bool
+    {
+        $candidate = mb_strtoupper(trim($value));
+        $candidate = preg_replace('/^(KELAS|KLS|CLASS)\s*/u', '', $candidate) ?? $candidate;
+        $candidate = preg_replace('/\s+/u', '', $candidate) ?? $candidate;
+
+        return $this->isRombelUmumValue($candidate);
+    }
+
+    private function isRombelUmumValue(string $candidate): bool
+    {
+        return in_array($candidate, ['UMUM', 'PUBLIK', 'UMUM/PUBLIK'], true);
     }
 
     private function isNumeric(string $value): bool

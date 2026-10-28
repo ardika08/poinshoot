@@ -18,6 +18,13 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  */
 class AdminStorePlayersRequest extends FormRequest
 {
+    /**
+     * Nilai khusus "rombel umum" — untuk peserta gelar karya / acara umum.
+     * Disimpan sebagai `null` di kolom rombel (lihat AdminController),
+     * sehingga otomatis masuk papan peringkat Umum, bukan papan sekolah.
+     */
+    public const ROMBEL_UMUM = 'UMUM';
+
     public function authorize(): bool
     {
         // Akses sudah dijaga middleware `admin` di routes/api.php
@@ -27,7 +34,8 @@ class AdminStorePlayersRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'rombel' => ['required', 'string', 'regex:/^[1-6][A-Z]$/'],
+            // Rombel sekolah (1A-6B) atau "UMUM" untuk peserta gelar karya.
+            'rombel' => ['required', 'string', 'regex:/^([1-6][A-Z]|UMUM)$/'],
             'names' => ['required', 'array', 'min:1', 'max:500'],
             'names.*' => ['string', 'max:100'],
         ];
@@ -37,7 +45,7 @@ class AdminStorePlayersRequest extends FormRequest
     {
         return [
             'rombel.required' => 'Rombel wajib dipilih',
-            'rombel.regex' => 'Format rombel harus seperti 4A atau 4B',
+            'rombel.regex' => 'Format rombel harus seperti 4A, 4B, atau UMUM',
             'names.required' => 'Daftar nama wajib diisi',
             'names.min' => 'Isi minimal satu nama',
             'names.max' => 'Maksimal 500 nama sekali simpan',

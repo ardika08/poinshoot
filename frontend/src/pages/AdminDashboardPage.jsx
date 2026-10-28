@@ -6,6 +6,7 @@ import {
   Plus, AlertCircle, LogOut, Check, X, RotateCcw, RefreshCw, ChevronRight
 } from 'lucide-react'
 import api, { adminToken } from '../lib/api'
+import { ROMBELS, ROMBEL_UMUM, labelRombel } from '../lib/rombels'
 import useBoardConfig from '../hooks/useBoardConfig'
 import BoardPicker from '../components/BoardPicker'
 import AddStudentsPanel from '../components/AddStudentsPanel'
@@ -252,7 +253,7 @@ const AdminDashboardPage = () => {
    */
   const handleDeletePlayer = async (player) => {
     const punyaSkor = (player.manual_score || player.simulation_score) > 0
-    const pesan = `Hapus ${player.name} (${player.rombel})?\n\n` +
+    const pesan = `Hapus ${player.name} (${labelRombel(player.rombel)})?\\n\\n` +
       (punyaSkor
         ? `Riwayat skornya ikut terhapus (manual ${player.manual_score}, simulasi ${player.simulation_score}).`
         : 'Siswa ini belum punya skor.') +
@@ -279,7 +280,7 @@ const AdminDashboardPage = () => {
     const targets = players.filter((p) => isSelected(p.id))
     if (targets.length === 0) return
 
-    const daftar = targets.map((p) => `• ${p.name} (${p.rombel})`).join('\n')
+    const daftar = targets.map((p) => `• ${p.name} (${labelRombel(p.rombel)})`).join('\\n')
     const pesan = `Hapus ${targets.length} siswa beserta SELURUH riwayat skornya?\n\n` +
       `${daftar}\n\nTidak bisa dibatalkan.`
     if (!window.confirm(pesan)) return
@@ -313,7 +314,9 @@ const AdminDashboardPage = () => {
       ['Nama', 'Rombel', 'Manual', 'Simulasi', 'Skor Final', 'Status'],
       ...filteredPlayers.map(p => [
         p.name,
-        p.rombel,
+        // Peserta gelar karya tidak punya kelas → tulis "Umum" di CSV,
+        // jangan sel kosong yang membingungkan saat dibuka di Excel.
+        p.rombel ? p.rombel : 'Umum',
         p.manual_score,
         p.simulation_score,
         p.final_score,
@@ -330,12 +333,18 @@ const AdminDashboardPage = () => {
     URL.revokeObjectURL(url)
   }
 
+  /* Rombel pemain bisa kosong untuk peserta gelar karya (Umum). Kelompokkan
+     mereka di bawah nilai "UMUM" supaya bisa dipilih & disaring seperti kelas. */
+  const rombelOf = (p) => (p.rombel ? p.rombel : ROMBEL_UMUM)
+
   const rombelOptions = [...new Set([
-    ...players.map(p => p.rombel).filter(Boolean),
-    ...['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'],
-  ])].sort()
+    ...players.map(rombelOf),
+    ...ROMBELS,
+    ROMBEL_UMUM,
+  ])].sort((a, b) => (a === ROMBEL_UMUM ? 1 : b === ROMBEL_UMUM ? -1 : a.localeCompare(b)))
+
   const filteredPlayers = players.filter(p =>
-    (!selectedRombel || p.rombel === selectedRombel) &&
+    (!selectedRombel || rombelOf(p) === selectedRombel) &&
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -506,7 +515,7 @@ const AdminDashboardPage = () => {
                   >
                     <option value="">-- Pilih Pemain --</option>
                     {filteredPlayers.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} · {p.rombel}</option>
+                      <option key={p.id} value={p.id}>{p.name} · {labelRombel(p.rombel)}</option>
                     ))}
                   </select>
                   {playerPagination?.total > players.length && (
@@ -825,7 +834,7 @@ const AdminDashboardPage = () => {
                 />
                 <div className="min-w-0 flex-grow">
                   <h3 className="font-semibold text-sm text-gray-900 truncate">{player.name}</h3>
-                  <p className="text-xs text-gray-400">{player.rombel}</p>
+                  <p className="text-xs text-gray-400">{labelRombel(player.rombel)}</p>
                   <div className="flex items-center space-x-2 mt-0.5">
                     <span className="text-xs text-gray-500">Manual {player.manual_score}</span>
                     <span className="text-xs text-gray-500">Sim {player.simulation_score}</span>

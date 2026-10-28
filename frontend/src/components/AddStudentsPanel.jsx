@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, Upload, X, Loader2, Info,
 } from 'lucide-react'
 import api, { ApiError } from '../lib/api'
-import { ROMBELS } from '../lib/rombels'
+import { ROMBELS, ROMBEL_UMUM } from '../lib/rombels'
 
 const CONTOH_TEMPEL = `Tempel di sini (Ctrl+V), contoh:
 
@@ -13,11 +13,15 @@ Budi Santoso\t4A
 Siti Aminah\t4A
 Rina Wati\t4B
 
+Tulis UMUM untuk peserta gelar karya:
+Ardika Yudha\tUMUM
+
 Boleh juga hanya nama saja — asal kolom rombel di atas dipilih.`
 
 const petaRombel = (byRombel) =>
   Object.entries(byRombel || {})
-    .map(([r, n]) => `${r} (${n})`)
+    // Kunci "UMUM" (atau kosong) = peserta gelar karya, bukan kelas sekolah
+    .map(([r, n]) => `${r === ROMBEL_UMUM || r === '' ? 'Umum' : r} (${n})`)
     .join(', ')
 
 /**
@@ -185,9 +189,12 @@ const AddStudentsPanel = ({ onAdded }) => {
                 >
                   <option value="">Rombel bawaan: tidak dipilih</option>
                   {ROMBELS.map((r) => <option key={r} value={r}>Rombel bawaan: {r}</option>)}
+                  <option value={ROMBEL_UMUM}>Rombel bawaan: Umum (gelar karya)</option>
                 </select>
                 <p className="text-xs text-gray-500 flex-1 min-w-[12rem]">
                   Dipakai hanya untuk nama yang rombelnya tidak tertulis di data.
+                  Pilih <span className="font-medium text-gray-700">Umum</span> untuk peserta gelar karya
+                  (masuk papan peringkat Umum, bukan papan kelas).
                 </p>
               </div>
 
